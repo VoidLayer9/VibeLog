@@ -1,17 +1,82 @@
 [
     {
-        "name": "Lua",
+        "name": "lua",
         "navbar":true,
         "description": "Articles about the Lua language and its ecosystem"
     },
     {
-        "name": "C",
+        "name": "c",
         "navbar":true,
         "description": "Low-level development and architecture in C"
     },
     {
-        "name": "Vibecoding",
+        "name": "vibecoding",
         "navbar":true,
         "description": "Code philosophy, minimalism and aesthetics"
+    },
+    {
+        "name": "architecture",
+        "navbar":true,
+        "description": "Articles about architecture and design patterns"
+    },
+    {
+        "name": "linux",
+        "navbar":true,
+        "description": "Articles about Linux and system administration"
+    },
+    {
+        "name": "history",
+        "navbar":true,
+        "description": "Articles about history and culture"
+    },
+    {
+        "name": "philosophy",
+        "navbar":true,
+        "description": "Articles about philosophy and existentialism"
+    },
+    {
+        "name": "tools",
+        "navbar":true,
+        "description": "Articles about tools and utilities"
+    },
+    {
+        "name": "projects",
+        "navbar":true,
+        "description": "Articles about projects and experiments"
+    },
+    {
+        "name": "news",
+        "navbar":true,
+        "description": "Articles about news and current events"
+    },
+    {
+        "name": "reviews",
+        "navbar":true,
+        "description": "Articles about reviews and recommendations"
+    },
+    {
+        "name": "tutorials",
+        "navbar":true,
+        "description": "Articles about tutorials and how-tos"
+    },
+    {
+        "name": "tips",
+        "navbar":true,
+        "description": "Articles about tips and tricks"
+    },
+    {
+        "name": "thoughts",
+        "navbar":true,
+        "description": "Articles about thoughts and reflections"
+    },
+    {
+        "name": "rants",
+        "navbar":true,
+        "description": "Articles about rants and opinions"
+    },
+    {
+        "name": "rants",
+        "navbar":true,
+        "description": "Articles about rants and opinions"
     }
 ]
