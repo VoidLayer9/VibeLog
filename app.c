@@ -202,6 +202,10 @@ struct appdeps{
     const unsigned char * (*get_asset_content)(const char *path,long *size,appbool *is_binary);
     appstringarray * (*list_assets)(const char *path);
 
+    //============================TIME==================================================
+    long (*get_unix_time)(void);
+    int (*get_random)(void);
+    void (*get_formatted_time)(long timestamp, char *buf, int buf_size, const char *fmt);
     //============================SERVER==================================================
     int (*start_server)(int port, const appserverresponse *(*handler)(appdeps *d, void *props), void *props, appbool single_process);
 

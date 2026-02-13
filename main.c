@@ -1,6 +1,4 @@
 #include "wrapper/imports/imports.dep_define.h"
-#include <time.h>
-#include <stdlib.h>
 
 
 int main(int argc, char *argv[]) {
