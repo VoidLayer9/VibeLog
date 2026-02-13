@@ -1,0 +1,42 @@
+<h1>Lua Coroutines: Threads from Beyond</h1>
+
+<p>Coroutines in Lua offer a unique model of concurrency: cooperative multitasking. Unlike OS threads, coroutines yield control voluntarily, eliminating race conditions and the need for locks.</p>
+
+<h2>Creating and Resuming</h2>
+
+<pre><code>local co = coroutine.create(function(x)
+    print("First run:", x)
+    local y = coroutine.yield(x * 2)
+    print("Resumed with:", y)
+    return x + y
+end)
+
+local ok, result = coroutine.resume(co, 10)  -- First run: 10
+print(result)  -- 20
+
+local ok, result = coroutine.resume(co, 5)   -- Resumed with: 5
+print(result)  -- 15</code></pre>
+
+<h2>Coroutine vs OS Threads</h2>
+
+<ul>
+    <li><strong>No preemption</strong>: A coroutine runs until it explicitly yields. No surprise context switches.</li>
+    <li><strong>No locks needed</strong>: Since only one coroutine runs at a time, shared state access is naturally serialized.</li>
+    <li><strong>Lightweight</strong>: Each coroutine costs a few kilobytes. You can run thousands simultaneously.</li>
+    <li><strong>Deterministic</strong>: The execution order is entirely controlled by the programmer.</li>
+</ul>
+
+<h2>Async I/O Patterns</h2>
+
+<p>Coroutines shine in I/O-bound applications. Wrap blocking calls in a scheduler that yields on I/O and resumes when data is ready:</p>
+
+<pre><code>function async_read(socket)
+    while not socket:has_data() do
+        coroutine.yield()  -- Let other coroutines run
+    end
+    return socket:read()
+end</code></pre>
+
+<h2>The Power of Cooperative Concurrency</h2>
+
+<p>In a world obsessed with parallelism, coroutines remind us that concurrency and parallelism are different beasts. Sometimes, elegant cooperation beats brute-force threading.</p>

@@ -1,0 +1,7 @@
+{
+    "title": "Memory Management Rituals in C",
+    "summary": "Mastering the allocation and liberation of memory. How to avoid leaks and corruption in long-running daemons.",
+    "author_id": "cipher_9",
+    "thumbnail": "assets/thumbnail.jpg",
+    "categories": ["c", "systems"]
+}

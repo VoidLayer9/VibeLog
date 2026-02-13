@@ -1,0 +1,48 @@
+<h1>The Unix Philosophy: Ancient Wisdom</h1>
+
+<p>In 1978, Doug McIlroy articulated what would become the most influential design philosophy in computing history. Nearly five decades later, these principles remain as relevant as ever.</p>
+
+<h2>The Core Tenets</h2>
+
+<ol>
+    <li><strong>Do one thing and do it well.</strong> Write programs that do one thing. Don't add features that don't serve the core purpose.</li>
+    <li><strong>Write programs to work together.</strong> Design for composability. Expect your output to become another program's input.</li>
+    <li><strong>Design for text streams.</strong> Text is the universal interface. It can be piped, grepped, sed'd, awk'd, and transformed with infinite flexibility.</li>
+</ol>
+
+<h2>Composability in Action</h2>
+
+<pre><code># Count unique IP addresses in access log
+cat access.log | awk '{print $1}' | sort | uniq -c | sort -rn | head -20
+
+# Find the 10 largest files
+find / -type f -exec du -h {} + 2>/dev/null | sort -rh | head -10
+
+# Monitor changes to a file
+while true; do
+    md5sum config.yaml
+    sleep 5
+done | uniq</code></pre>
+
+<h2>Modern Violations</h2>
+
+<p>Modern software frequently violates Unix principles:</p>
+
+<ul>
+    <li><strong>Monolithic apps</strong> that try to do everything (IDEs, web browsers)</li>
+    <li><strong>Binary formats</strong> that can't be piped or inspected (proprietary databases)</li>
+    <li><strong>Tight coupling</strong> between components that should be independent</li>
+</ul>
+
+<h2>Applying Unix Philosophy Today</h2>
+
+<p>Even in web applications and cloud services, the principles apply:</p>
+
+<ul>
+    <li>Design APIs with single responsibilities</li>
+    <li>Use JSON/text for inter-service communication</li>
+    <li>Build small, composable functions instead of god objects</li>
+    <li>Prefer stdin/stdout patterns: read input, transform, write output</li>
+</ul>
+
+<p>The ancient wisdom endures because simplicity never goes out of style. Build small. Build composable. Build Unix.</p>

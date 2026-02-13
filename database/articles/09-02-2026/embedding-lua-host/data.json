@@ -1,0 +1,7 @@
+{
+    "title": "Embedding Lua: Possessing the Host Application",
+    "summary": "Integrating Lua into C applications correctly. The stack, the registry, and safe calls.",
+    "author_id": "void_walker",
+    "thumbnail": "assets/thumbnail.jpg",
+    "categories": ["lua", "c", "architecture"]
+}

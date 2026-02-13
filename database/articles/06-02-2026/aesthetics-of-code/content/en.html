@@ -1,0 +1,56 @@
+<h1>Aesthetics of Code: Formatting as Art</h1>
+
+<p>Code is read far more often than it is written. The visual structure of your source files communicates intent as much as the logic itself. Beautiful code is not vanity — it is a tool for comprehension.</p>
+
+<h2>Symmetry and Alignment</h2>
+
+<p>Well-aligned code creates visual patterns that the eye can follow instantly:</p>
+
+<pre><code>// Beautiful: aligned assignments
+const char *name    = "void_walker";
+int         age     = 0xFF;
+float       entropy = 3.14f;
+bool        alive   = true;
+
+// Ugly: random spacing
+const char *name = "void_walker";
+int age = 0xFF;
+float entropy = 3.14f;
+bool alive = true;</code></pre>
+
+<h2>Vertical Rhythm</h2>
+
+<p>Group related statements together and separate groups with blank lines. This creates a visual rhythm that mirrors the logical structure:</p>
+
+<pre><code>// Parse input
+char *input = read_line(stdin);
+Token *tokens = tokenize(input);
+
+// Build AST
+Node *ast = parse(tokens);
+validate(ast);
+
+// Generate output
+Code *code = compile(ast);
+emit(code, stdout);</code></pre>
+
+<h2>Naming as Poetry</h2>
+
+<p>Variable names should tell a story. Compare:</p>
+
+<pre><code>// Cryptic
+int x = fn(a, b);
+
+// Clear
+int total_price = calculate_discount(base_price, membership_level);</code></pre>
+
+<h2>The Rules</h2>
+
+<ul>
+    <li>Functions should fit on one screen.</li>
+    <li>Each function should do exactly one thing.</li>
+    <li>Comments explain <em>why</em>, not <em>what</em>.</li>
+    <li>Consistent style matters more than any particular style.</li>
+</ul>
+
+<p>When you format code with care, you are not wasting time — you are investing in every future reader, including your future self.</p>

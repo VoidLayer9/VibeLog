@@ -1,0 +1,7 @@
+{
+    "title": "Monolith vs Microservices: Architectural Schism",
+    "summary": "The eternal war. Why simple monolithic architectures often beat distributed complexity.",
+    "author_id": "kernel_panic",
+    "thumbnail": "assets/thumbnail.jpg",
+    "categories": ["architecture", "systems"]
+}

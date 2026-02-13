@@ -1,0 +1,5 @@
+{
+    "name": "Kernel Panic",
+    "description": "Chaos engineer. Tests the limits of stability, one segfault at a time.",
+    "picture": "assets/picture.jpg"
+}

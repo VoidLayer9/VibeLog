@@ -1,0 +1,7 @@
+{
+    "title": "Pointers to the Void: Advanced C Tricks",
+    "summary": "Navigating the darkness of raw memory access. Void pointers, function pointers, and unsafe casting.",
+    "author_id": "void_walker",
+    "thumbnail": "assets/thumbnail.jpg",
+    "categories": ["c", "vibecoding"]
+}

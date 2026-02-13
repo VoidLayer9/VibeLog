@@ -1,0 +1,7 @@
+{
+    "title": "The Silent Segfault: Debugging Nightmares",
+    "summary": "When the kernel kills your process without a word. Analyzing core dumps and stack traces.",
+    "author_id": "kernel_panic",
+    "thumbnail": "assets/thumbnail.jpg",
+    "categories": ["c", "debugging"]
+}

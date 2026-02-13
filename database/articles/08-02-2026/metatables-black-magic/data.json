@@ -1,0 +1,7 @@
+{
+    "title": "Metatables and Black Magic",
+    "summary": "Bending Lua's syntax to your will. Operator overloading, proxies, and forbidden techniques.",
+    "author_id": "kernel_panic",
+    "thumbnail": "assets/thumbnail.jpg",
+    "categories": ["lua", "vibecoding"]
+}

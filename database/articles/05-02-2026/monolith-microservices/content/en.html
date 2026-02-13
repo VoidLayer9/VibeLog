@@ -1,0 +1,51 @@
+<h1>Monolith vs Microservices: Architectural Schism</h1>
+
+<p>The software industry is gripped by a religious war. On one side: the microservice evangelists promising infinite scalability. On the other: battle-hardened engineers who know that a well-structured monolith can outperform a distributed mess.</p>
+
+<h2>The Microservice Promise</h2>
+
+<ul>
+    <li>Independent deployments</li>
+    <li>Team autonomy</li>
+    <li>Technology diversity</li>
+    <li>Horizontal scaling per service</li>
+</ul>
+
+<h2>The Microservice Reality</h2>
+
+<ul>
+    <li>Network is not reliable</li>
+    <li>Distributed transactions are a nightmare</li>
+    <li>Debugging across service boundaries requires tracing infrastructure</li>
+    <li>Data consistency requires eventual consistency patterns (sagas, CQRS)</li>
+    <li>DevOps overhead multiplied by number of services</li>
+</ul>
+
+<h2>The Monolith Advantage</h2>
+
+<p>A monolith with clean internal module boundaries provides:</p>
+
+<pre><code>my_app/
+├── modules/
+│   ├── auth/        # Authentication module
+│   ├── billing/     # Payment processing
+│   ├── inventory/   # Stock management
+│   └── shipping/    # Order fulfillment
+├── shared/
+│   ├── database/    # Single, consistent data layer
+│   └── events/      # In-process event bus
+└── main.c           # Single deployment unit</code></pre>
+
+<p>One binary. One deployment. One database. Fast function calls instead of HTTP requests. Transactions instead of sagas.</p>
+
+<h2>When to Distribute</h2>
+
+<p>Split into services only when you have a concrete need:</p>
+
+<ol>
+    <li>Different scaling requirements (e.g., video processing vs API serving)</li>
+    <li>Different reliability requirements (e.g., payment processing isolation)</li>
+    <li>Team size exceeds what can coordinate on a single codebase (100+ engineers)</li>
+</ol>
+
+<p>Start with a monolith. Extract services when the pain is real, not imagined. Premature distribution is the root of all evil in modern architecture.</p>

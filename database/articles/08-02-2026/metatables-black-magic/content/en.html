@@ -1,0 +1,71 @@
+<h1>Metatables and Black Magic</h1>
+
+<p>Metatables are Lua's secret weapon. They allow you to override fundamental operations on tables — addition, comparison, indexing, even function calls. With metatables, Lua's syntax becomes a canvas for creating domain-specific languages.</p>
+
+<h2>The __index Metamethod</h2>
+
+<p>The <code>__index</code> metamethod intercepts access to missing keys. It's the foundation of inheritance in Lua:</p>
+
+<pre><code>local Animal = {}
+Animal.__index = Animal
+
+function Animal.new(name, sound)
+    local self = setmetatable({}, Animal)
+    self.name = name
+    self.sound = sound
+    return self
+end
+
+function Animal:speak()
+    print(self.name .. " says " .. self.sound)
+end
+
+local cat = Animal.new("Cat", "meow")
+cat:speak()  -- "Cat says meow"</code></pre>
+
+<h2>Operator Overloading</h2>
+
+<pre><code>local Vector = {}
+Vector.__index = Vector
+
+function Vector.new(x, y)
+    return setmetatable({x = x, y = y}, Vector)
+end
+
+function Vector.__add(a, b)
+    return Vector.new(a.x + b.x, a.y + b.y)
+end
+
+function Vector.__tostring(v)
+    return string.format("(%g, %g)", v.x, v.y)
+end
+
+local v = Vector.new(1, 2) + Vector.new(3, 4)
+print(v)  -- (4, 6)</code></pre>
+
+<h2>Proxy Tables with __newindex</h2>
+
+<p>Create read-only tables, validation layers, or observable objects by intercepting writes:</p>
+
+<pre><code>local function readonly(t)
+    return setmetatable({}, {
+        __index = t,
+        __newindex = function()
+            error("Attempt to modify read-only table")
+        end
+    })
+end</code></pre>
+
+<h2>The __call Metamethod</h2>
+
+<p>Make any table callable like a function. This enables factory patterns, decorators, and functional programming idioms:</p>
+
+<pre><code>local Logger = setmetatable({}, {
+    __call = function(self, msg)
+        print("[LOG] " .. os.date() .. ": " .. msg)
+    end
+})
+
+Logger("System initialized")  -- Table used as function</code></pre>
+
+<p>Metatables blur the line between data and behavior. Use them wisely, and Lua bends to your will.</p>

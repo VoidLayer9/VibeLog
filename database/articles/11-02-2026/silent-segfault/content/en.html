@@ -1,0 +1,38 @@
+<h1>The Silent Segfault: Debugging Nightmares</h1>
+
+<p>There is no error message. No warning. Your process simply vanishes, killed silently by the kernel. The segmentation fault — the ghost in the machine — strikes without mercy.</p>
+
+<h2>What Actually Happens</h2>
+
+<p>When your program accesses memory it doesn't own, the CPU's memory management unit triggers a fault. The kernel delivers <code>SIGSEGV</code> to your process. If unhandled, your process dies. Sometimes the access pattern is just wrong enough to corrupt data silently without crashing — the worst scenario of all.</p>
+
+<h2>Reading Core Dumps</h2>
+
+<p>Enable core dumps with <code>ulimit -c unlimited</code>, then analyze them:</p>
+
+<pre><code>$ gdb ./my_program core
+(gdb) bt          # Show backtrace
+(gdb) frame 3     # Jump to frame
+(gdb) info locals  # Show local variables
+(gdb) print *ptr   # Examine pointer contents</code></pre>
+
+<h2>AddressSanitizer: The Modern Approach</h2>
+
+<p>Compile with <code>-fsanitize=address</code> to get detailed reports on memory errors at runtime. ASan can detect:</p>
+
+<ul>
+    <li>Use-after-free</li>
+    <li>Heap/stack/global buffer overflows</li>
+    <li>Use-after-return</li>
+    <li>Double-free and invalid-free</li>
+</ul>
+
+<h2>The Hardest Bugs</h2>
+
+<p>Some crashes only manifest under specific conditions: high memory pressure, particular thread interleavings, or rare input combinations. These Heisenbugs require patience, logging, and sometimes mechanical sympathy with the hardware to resolve.</p>
+
+<pre><code>// This might crash only when addr is page-aligned
+// and the next page is unmapped
+char c = *(volatile char*)addr;</code></pre>
+
+<p>The silent segfault teaches humility. In C, you are not above the machine — you are at its mercy.</p>

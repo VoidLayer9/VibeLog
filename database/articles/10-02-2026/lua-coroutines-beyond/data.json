@@ -1,0 +1,7 @@
+{
+    "title": "Lua Coroutines: Threads from Beyond",
+    "summary": "Implementing cooperative multitasking. How coroutines differ from OS threads and why they matter.",
+    "author_id": "cipher_9",
+    "thumbnail": "assets/thumbnail.jpg",
+    "categories": ["lua", "concurrency"]
+}

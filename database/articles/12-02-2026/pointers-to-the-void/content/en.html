@@ -1,0 +1,45 @@
+<h1>Pointers to the Void: Advanced C Tricks</h1>
+
+<p>In C, the <code>void*</code> pointer is both the most powerful and the most dangerous tool in a programmer's arsenal. It represents raw, untyped memory — a gateway to generic programming in a language that has no generics.</p>
+
+<h2>The Nature of void*</h2>
+
+<p>A <code>void*</code> can hold the address of any data type. It is the lingua franca of C APIs, used in <code>qsort()</code>, <code>bsearch()</code>, <code>pthread_create()</code>, and countless other standard library functions.</p>
+
+<pre><code>void swap(void *a, void *b, size_t size) {
+    char temp[size];
+    memcpy(temp, a, size);
+    memcpy(a, b, size);
+    memcpy(b, temp, size);
+}</code></pre>
+
+<h2>Function Pointers: Code as Data</h2>
+
+<p>Function pointers allow you to store and pass around references to executable code. Combined with <code>void*</code> for data, this pattern enables polymorphism in C.</p>
+
+<pre><code>typedef int (*Comparator)(const void*, const void*);
+
+int compare_int(const void *a, const void *b) {
+    return (*(int*)a - *(int*)b);
+}
+
+// Usage with qsort
+qsort(array, n, sizeof(int), compare_int);</code></pre>
+
+<h2>Building a Generic Container</h2>
+
+<p>With <code>void*</code> and function pointers, you can build type-erased containers that rival C++ templates in functionality (though not in type safety).</p>
+
+<pre><code>typedef struct {
+    void **items;
+    size_t count;
+    size_t capacity;
+    size_t item_size;
+    void (*destructor)(void*);
+} GenericArray;</code></pre>
+
+<h2>The Dangers of the Void</h2>
+
+<p>With great power comes great responsibility. Unsafe casts through <code>void*</code> bypass the type system entirely. A wrong cast is silent at compile time but catastrophic at runtime. Always document your <code>void*</code> contracts explicitly.</p>
+
+<p>The void is not empty — it is full of potential. Navigate it carefully.</p>

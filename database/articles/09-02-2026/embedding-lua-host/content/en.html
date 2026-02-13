@@ -1,0 +1,56 @@
+<h1>Embedding Lua: Possessing the Host Application</h1>
+
+<p>Lua was designed from the ground up to be embedded. Its C API is minimal yet powerful, allowing any C application to gain the flexibility of a scripting language without sacrificing performance.</p>
+
+<h2>Setting Up the Lua State</h2>
+
+<pre><code>#include &lt;lua.h&gt;
+#include &lt;lauxlib.h&gt;
+#include &lt;lualib.h&gt;
+
+int main(void) {
+    lua_State *L = luaL_newstate();
+    luaL_openlibs(L);
+
+    if (luaL_dofile(L, "config.lua") != LUA_OK) {
+        fprintf(stderr, "Error: %s\n", lua_tostring(L, -1));
+        lua_pop(L, 1);
+    }
+
+    lua_close(L);
+    return 0;
+}</code></pre>
+
+<h2>The Stack: Lua's Communication Channel</h2>
+
+<p>All data exchange between C and Lua happens through a virtual stack. Understanding the stack is the single most important concept for Lua embedding:</p>
+
+<pre><code>// Push a global function onto the stack
+lua_getglobal(L, "my_function");
+// Push arguments
+lua_pushinteger(L, 42);
+lua_pushstring(L, "hello");
+// Call: 2 arguments, 1 result
+lua_pcall(L, 2, 1, 0);
+// Get the result
+int result = lua_tointeger(L, -1);
+lua_pop(L, 1);</code></pre>
+
+<h2>Exposing C Functions to Lua</h2>
+
+<pre><code>static int l_add(lua_State *L) {
+    double a = luaL_checknumber(L, 1);
+    double b = luaL_checknumber(L, 2);
+    lua_pushnumber(L, a + b);
+    return 1;  // Number of return values
+}
+
+// Register the function
+lua_pushcfunction(L, l_add);
+lua_setglobal(L, "add");</code></pre>
+
+<h2>The Registry</h2>
+
+<p>The Lua registry is a special table accessible only from C. Use it to store references that persist across function calls without polluting the global namespace. Use <code>luaL_ref()</code> and <code>luaL_unref()</code> for safe reference management.</p>
+
+<p>When you embed Lua, your C application gains a soul. It becomes configurable, extensible, and alive.</p>
