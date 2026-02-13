@@ -172,7 +172,12 @@ appdeps global_appdeps = {
     .free_clientresponse = wrapper_httpclient_response_free,
     .get_asset_content = wrapper_get_asset_content,
     .list_assets = wrapper_list_assets,
-    .start_server = wrapper_start_server
+    .start_server = wrapper_start_server,
+
+    // Time & random functions
+    .get_unix_time = wrapper_get_unix_time,
+    .get_random = wrapper_get_random,
+    .get_formatted_time = wrapper_get_formatted_time
 };
 CwebHttpResponse *main_internal_server(CwebHttpRequest *request) {
     global_appdeps.appserverrequest = (const void*)request;

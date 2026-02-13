@@ -230,3 +230,8 @@ const char *wrapper_get_arg_flag_value(const void *argv,const char **flags,int t
 int wrapper_get_arg_flag_count(const void *argv,const char **flags,int total_flags);
 
 appbool wrapper_has_arg_flag(const void *argv,const char **flags,int total_flags);
+//fdefine.time.c
+
+long wrapper_get_unix_time(void);
+int wrapper_get_random(void);
+void wrapper_get_formatted_time(long timestamp, char *buf, int buf_size, const char *fmt);
