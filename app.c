@@ -256,32 +256,32 @@ void sidebar_calc(appdeps *d) {
     if (!dates) return;
     long ndate = d->get_stringarray_size(dates);
     for (long di = 0; di < ndate; di++) {
-        const char *datepath = d->get_stringarray_item(dates, di);
+        const char *datename = d->get_stringarray_item(dates, di);
+        char *datepath = d->concat_path("database/articles", datename);
         appstringarray *arts = d->list_dirs(datepath);
-        if (!arts) continue;
+        if (!arts) { d->free(datepath); continue; }
         long nart = d->get_stringarray_size(arts);
         for (long ai = 0; ai < nart; ai++) {
-            const char *artpath = d->get_stringarray_item(arts, ai);
-            // get article id and date from path
+            const char *artname = d->get_stringarray_item(arts, ai);
+            char *artpath = d->concat_path(datepath, artname);
             // Load data.json for categories
             char *djp = d->concat_path(artpath, "data.json");
             appjson *aj = d->json_parse_file(djp);
             d->free(djp);
-            if (!aj) continue;
+            if (!aj) { d->free(artpath); continue; }
             appjson *cats = d->json_get_object_item(aj, "categories");
-            // Extract basename from datepath for date, basename from artpath for id
-            const char *dname = datepath; { const char *p = datepath; while(*p){if(*p=='/')dname=p+1;p++;} }
-            const char *aname = artpath; { const char *p = artpath; while(*p){if(*p=='/')aname=p+1;p++;} }
             // Load total_views
-            char mp[512]; d->snprintf(mp, 512, "database/metrics/articles/%s/%s/total_views.json", dname, aname);
+            char mp[512]; d->snprintf(mp, 512, "database/metrics/articles/%s/%s/total_views.json", datename, artname);
             int views = 0;
             if (d->file_exists(mp)) { appjson *vj = d->json_parse_file(mp); if(vj){views=(int)d->json_get_number_value(d->json_get_object_item(vj,"views"));d->json_delete(vj);} }
             sidebar_total_views += views;
             // Add to per-category
             if (cats) { int nc = d->json_get_array_size(cats); for(int ci=0;ci<nc;ci++){ char *cn=d->json_get_string_value(d->json_get_array_item(cats,ci)); int found=-1; for(int si=0;si<sidebar_cat_count;si++){if(app_strcasecmp(sidebar_cats[si].name,cn)==0){found=si;break;}} if(found>=0){sidebar_cats[found].views+=views;}else if(sidebar_cat_count<MAX_CATS){int k=0;while(cn[k]&&k<63){sidebar_cats[sidebar_cat_count].name[k]=cn[k];k++;}sidebar_cats[sidebar_cat_count].name[k]='\0';sidebar_cats[sidebar_cat_count].views=views;sidebar_cat_count++;} } }
             d->json_delete(aj);
+            d->free(artpath);
         }
         d->delete_stringarray(arts);
+        d->free(datepath);
     }
     d->delete_stringarray(dates);
     // Sort cats descending by views
@@ -422,17 +422,17 @@ int load_articles(appdeps *d, article_entry *out) {
     if (!dates) return 0;
     long nd = d->get_stringarray_size(dates);
     for (long di = 0; di < nd && count < MAX_ARTICLES; di++) {
-        const char *dp = d->get_stringarray_item(dates, di);
-        const char *dname = dp; { const char *p = dp; while(*p){if(*p=='/')dname=p+1;p++;} }
+        const char *dname = d->get_stringarray_item(dates, di);
+        char *dp = d->concat_path("database/articles", dname);
         appstringarray *arts = d->list_dirs(dp);
-        if (!arts) continue;
+        if (!arts) { d->free(dp); continue; }
         long na = d->get_stringarray_size(arts);
         for (long ai = 0; ai < na && count < MAX_ARTICLES; ai++) {
-            const char *ap = d->get_stringarray_item(arts, ai);
-            const char *aname = ap; { const char *p = ap; while(*p){if(*p=='/')aname=p+1;p++;} }
+            const char *aname = d->get_stringarray_item(arts, ai);
+            char *ap = d->concat_path(dp, aname);
             char *djp = d->concat_path(ap, "data.json");
             appjson *aj = d->json_parse_file(djp); d->free(djp);
-            if (!aj) continue;
+            if (!aj) { d->free(ap); continue; }
             article_entry *e = &out[count];
             d->snprintf(e->date, 16, "%s", dname);
             d->snprintf(e->id, 128, "%s", aname);
@@ -446,9 +446,11 @@ int load_articles(appdeps *d, article_entry *out) {
             appjson *ca = d->json_get_object_item(aj,"categories");
             if(ca){int nc=d->json_get_array_size(ca);for(int ci=0;ci<nc&&ci<16;ci++){char *cn=d->json_get_string_value(d->json_get_array_item(ca,ci));d->snprintf(e->categories[ci],64,"%s",cn?cn:"");e->cat_count++;}}
             d->json_delete(aj);
+            d->free(ap);
             count++;
         }
         d->delete_stringarray(arts);
+        d->free(dp);
     }
     d->delete_stringarray(dates);
     // Sort descending by date
