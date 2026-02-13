@@ -75,8 +75,16 @@
         "description": "Articles about rants and opinions"
     },
     {
-        "name": "rants",
+        "name":"style",
         "navbar":true,
-        "description": "Articles about rants and opinions"
+        "description": "Articles about style and design"
+    },
+    {"name":"concurrency",
+    "navbar":true,
+    "description": "Articles about concurrency and parallelism"
+    },
+    {"name":"debugging",
+    "navbar":true,
+    "description": "Articles about debugging and troubleshooting"
     }
 ]
