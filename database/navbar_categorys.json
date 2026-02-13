@@ -1,0 +1,14 @@
+[
+    {
+        "name": "Lua",
+        "description": "Artigos sobre a linguagem Lua e seu ecossistema"
+    },
+    {
+        "name": "C",
+        "description": "Desenvolvimento de baixo nível e arquitetura em C"
+    },
+    {
+        "name": "Vibecoding",
+        "description": "Filosofia de código, minimalismo e estética"
+    }
+]
