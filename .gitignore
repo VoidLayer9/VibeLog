@@ -10,3 +10,4 @@ start_firmware.sh
 debug.so
 dependencies
 a.out
+database/metrics
