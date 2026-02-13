@@ -79,12 +79,15 @@
         "navbar":false,
         "description": "Articles about style and design"
     },
-    {"name":"concurrency",
-    "navbar":false,
-    "description": "Articles about concurrency and parallelism"
+
+    {
+        "name":"concurrency",
+        "navbar":false,
+        "description": "Articles about concurrency and parallelism"
     },
-    {"name":"debugging",
-    "navbar":false,
-    "description": "Articles about debugging and troubleshooting"
+    {
+        "name":"debugging",
+        "navbar":false,
+        "description": "Articles about debugging and troubleshooting"
     }
 ]
