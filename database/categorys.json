@@ -21,22 +21,22 @@
     },
     {
         "name": "linux",
-        "navbar":true,
+        "navbar":false,
         "description": "Articles about Linux and system administration"
     },
     {
         "name": "history",
-        "navbar":true,
+        "navbar":false,
         "description": "Articles about history and culture"
     },
     {
         "name": "philosophy",
-        "navbar":true,
+        "navbar":false,
         "description": "Articles about philosophy and existentialism"
     },
     {
         "name": "tools",
-        "navbar":true,
+        "navbar":false,
         "description": "Articles about tools and utilities"
     },
     {
@@ -51,40 +51,40 @@
     },
     {
         "name": "reviews",
-        "navbar":true,
+        "navbar":false,
         "description": "Articles about reviews and recommendations"
     },
     {
         "name": "tutorials",
-        "navbar":true,
+        "navbar":false,
         "description": "Articles about tutorials and how-tos"
     },
     {
         "name": "tips",
-        "navbar":true,
+        "navbar":false,
         "description": "Articles about tips and tricks"
     },
     {
         "name": "thoughts",
-        "navbar":true,
+        "navbar":false,
         "description": "Articles about thoughts and reflections"
     },
     {
         "name": "rants",
-        "navbar":true,
+        "navbar":false,
         "description": "Articles about rants and opinions"
     },
     {
         "name":"style",
-        "navbar":true,
+        "navbar":false,
         "description": "Articles about style and design"
     },
     {"name":"concurrency",
-    "navbar":true,
+    "navbar":false,
     "description": "Articles about concurrency and parallelism"
     },
     {"name":"debugging",
-    "navbar":true,
+    "navbar":false,
     "description": "Articles about debugging and troubleshooting"
     }
 ]
