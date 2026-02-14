@@ -34,3 +34,15 @@ body:
     
 ]
 ~~~
+
+implemente também as funcionalidades na cli:
+start do servidor:
+~~~bash
+vibelog start --port 8080 --database_path /path/to/database
+~~~
+upload e sincronização do banco de dados:
+~~~bash
+vibelog upload --path /path/to/file --root_password your_password --url http://localhost:8080
+~~~
+
+
