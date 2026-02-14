@@ -177,7 +177,11 @@ appdeps global_appdeps = {
     // Time & random functions
     .get_unix_time = wrapper_get_unix_time,
     .get_random = wrapper_get_random,
-    .get_formatted_time = wrapper_get_formatted_time
+    .get_formatted_time = wrapper_get_formatted_time,
+
+    // sha functions
+    .get_sha256 = wrapper_generate_sha,
+    .get_cached_file_sha = wrapper_generate_cached_sha_from_file
 };
 CwebHttpResponse *main_internal_server(CwebHttpRequest *request) {
     global_appdeps.appserverrequest = (const void*)request;

@@ -216,7 +216,9 @@ void *wrapper_list_any(const char *path);
 void *wrapper_list_files_recursively(const char *path);
 void *wrapper_list_dirs_recursively(const char *path);
 void *wrapper_list_any_recursively(const char *path);
-//fdefine.asssets.c
+char *wrapper_generate_sha(const unsigned char *data, long size);
+
+char * wrapper_generate_cached_sha_from_file(const char *cache_path,const char *path);//fdefine.asssets.c
 
 const unsigned char *wrapper_get_asset_content(const char *path,long *size,int *is_binary);
 void *wrapper_list_assets(const char *path);

@@ -91,3 +91,32 @@ void *wrapper_list_any_recursively(const char *path){
     DtwStringArray *all = dtw_list_all_recursively(path,false);
     return (void *)all;
 }
+char *wrapper_generate_sha(const unsigned char *data, long size){
+    return dtw_generate_sha_from_any((unsigned char *)data,size);
+}
+
+char * wrapper_generate_cached_sha_from_file(const char *cache_path,const char *path){
+    const char *LAST_UPDATE = "l";
+    const char *CACHE_SHA_PATH = "s";
+    DtwResource * cache_dir = new_DtwResource(cache_path);
+    char *sha_of_path = dtw_generate_sha_from_string(path);
+    DtwResource * cache_file = DtwResource_sub_resource(cache_dir,sha_of_path);
+    free(sha_of_path);
+    DtwResource *last_modification = DtwResource_sub_resource(cache_file,LAST_UPDATE);
+    DtwResource *sha_of_file = DtwResource_sub_resource(cache_file,CACHE_SHA_PATH);
+
+    if(DtwResource_type(last_modification) == DTW_COMPLEX_LONG_TYPE){
+        long last_modification_time_of_file_saved = DtwResource_get_long(last_modification);
+        long last_modification_time_of_file = dtw_get_entity_last_motification_in_unix(path);
+        if(last_modification_time_of_file_saved == last_modification_time_of_file){
+            return DtwResource_get_string(sha_of_file);
+        }
+    }
+
+    char *sha = dtw_generate_sha_from_file(path);
+    DtwResource_set_long(last_modification,dtw_get_entity_last_motification_in_unix(path));
+    DtwResource_set_string(sha_of_file,sha);
+    DtwResource_commit(cache_dir);
+    return sha;
+    
+}
