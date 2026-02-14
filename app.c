@@ -180,7 +180,7 @@ struct appdeps{
     const char *(*get_arg_value)(const appargv *argv,int index); // positional arguments
     int (*get_arg_count)(const appargv *argv); // number of arguments
 
-    // use const char *help[] = {"--help","-h"}; for retrieving flags
+    // use const char *help[] = {"help","h"}; for retrieving flags
     const char *(*get_arg_flag_value)(const appargv *argv,const char **flags,int total_flags,int index); // --name || n mateus : mateus
     int (*get_arg_flag_count)(const appargv *argv,const char **flags,int total_flags); // --name || n : true
 
