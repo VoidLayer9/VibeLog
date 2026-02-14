@@ -37,12 +37,18 @@ body:
 
 implemente também as funcionalidades na cli:
 start do servidor:
+
 ~~~bash
-vibelog start --port 8080 --database_path /path/to/database
+vibelog start --port 8080 --database_path /path/to/database --root_password your_password
 ~~~
 upload e sincronização do banco de dados:
 ~~~bash
 vibelog upload --path /path/to/file --root_password your_password --url http://localhost:8080
 ~~~
+download e sincronização do banco de dados:
+~~~bash
+vibelog download --path /path/to/file --root_password your_password --url http://localhost:8080
+~~~
 
 
+(a variavell root password tem que ser salva em uma constante global)
