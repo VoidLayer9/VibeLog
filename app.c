@@ -155,8 +155,12 @@ struct appdeps{
     void (*delete_stringarray)(appstringarray *array); 
     long (*get_stringarray_size)(appstringarray *array);
     const char *(*get_stringarray_item)(appstringarray *array, int index);
+    char *(*get_sha256)(const unsigned char *content, long size);
+    //retturns the sha256 of a file, using a cache tecnique to improve performace
+    char *(*get_cached_file_sha)(const char *cache_dir,const char *path);
 
-
+    // all the listage functions return only the itens, they dont concatenate the path
+    // example depos->list_files("teste") -> {"a","b","c"} not {"teste/a","teste/b","teste/c"}
     appstringarray *  (*list_files)(const char *path);
     appstringarray *  (*list_dirs)(const char *path);
     appstringarray *  (*list_any)(const char *path);
