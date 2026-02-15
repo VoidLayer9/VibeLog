@@ -1,7 +1,7 @@
-//silver_chain_scope_start
-//mannaged by silver chain: https://github.com/OUIsolutions/SilverChain
+// silver_chain_scope_start
+// mannaged by silver chain: https://github.com/OUIsolutions/SilverChain
 #include "imports/imports.globals.h"
-//silver_chain_scope_end
+// silver_chain_scope_end
 
 int wrapper_snprintf(char *str, unsigned long size, const char *format, ...) {
   va_list args;

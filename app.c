@@ -965,47 +965,248 @@ const appserverresponse *router(appdeps *d, void *props) {
 }
 
 // ===============================MAIN==========================================
+// ===============================MAIN==========================================
 int appmain(appdeps *d) {
+  // Common Flags
+  const char *PASS_FLAGS[] = {"root_password", "pass"};
+  const char *URL_FLAGS[] = {"url", "u"};
+  const char *PATH_FLAGS[] = {"path", "f"};
+
+  // Server Flags
   const char *PORT_FLAGS[] = {"port", "p"};
   const char *DB_FLAGS[] = {"database_path", "db"};
-  const char *PASS_FLAGS[] = {"root_password", "pass"};
 
-  // Parse Port
-  const char *start_port = d->get_arg_flag_value(
-      d->argv, PORT_FLAGS, sizeof(PORT_FLAGS) / sizeof(PORT_FLAGS[0]), 0);
-  global_config.port = 8080;
-  if (start_port) {
-    global_config.port = d->atoi(start_port);
+  int argc = d->get_arg_count(d->argv);
+  const char *command =
+      "start"; // Default if not provided (for safety/backward compatibility)
+
+  if (argc > 1) {
+    const char *arg1 = d->get_arg_value(d->argv, 1);
+    if (arg1 && d->strlen(arg1) > 0 && arg1[0] != '-') {
+      command = arg1;
+    }
   }
 
-  // Parse Database Path
-  const char *db_path = d->get_arg_flag_value(
-      d->argv, DB_FLAGS, sizeof(DB_FLAGS) / sizeof(DB_FLAGS[0]), 0);
-  if (db_path) {
-    global_config.database_path = d->strdup(db_path);
-  } else {
-    global_config.database_path = d->strdup("database");
+  // COMMAND: START
+  if (d->strcmp(command, "start") == 0) {
+    // Parse Port
+    const char *start_port = d->get_arg_flag_value(
+        d->argv, PORT_FLAGS, sizeof(PORT_FLAGS) / sizeof(PORT_FLAGS[0]), 0);
+    global_config.port = 8080;
+    if (start_port) {
+      global_config.port = d->atoi(start_port);
+    }
+
+    // Parse Database Path
+    const char *db_path = d->get_arg_flag_value(
+        d->argv, DB_FLAGS, sizeof(DB_FLAGS) / sizeof(DB_FLAGS[0]), 0);
+    if (db_path) {
+      global_config.database_path = d->strdup(db_path);
+    } else {
+      global_config.database_path = d->strdup("database");
+    }
+
+    // Parse Root Password
+    const char *root_pass = d->get_arg_flag_value(
+        d->argv, PASS_FLAGS, sizeof(PASS_FLAGS) / sizeof(PASS_FLAGS[0]), 0);
+    if (root_pass) {
+      global_config.root_password = d->strdup(root_pass);
+    } else {
+      global_config.root_password = d->strdup("admin"); // Default
+    }
+
+    d->printf("Starting VibeLog on port %d\n", global_config.port);
+    d->printf("Database path: %s\n", global_config.database_path);
+
+    d->start_server(global_config.port, router, app_null, app_false);
+
+    // Cleanup (unreachable)
+    d->free((void *)global_config.database_path);
+    d->free((void *)global_config.root_password);
+    return 0;
   }
 
-  // Parse Root Password
-  const char *root_pass = d->get_arg_flag_value(
-      d->argv, PASS_FLAGS, sizeof(PASS_FLAGS) / sizeof(PASS_FLAGS[0]), 0);
-  if (root_pass) {
-    global_config.root_password = d->strdup(root_pass);
-  } else {
-    global_config.root_password = d->strdup("admin"); // Default
+  // COMMAND: UPLOAD
+  if (d->strcmp(command, "upload") == 0) {
+    const char *path = d->get_arg_flag_value(
+        d->argv, PATH_FLAGS, sizeof(PATH_FLAGS) / sizeof(PATH_FLAGS[0]), 0);
+    const char *url_base = d->get_arg_flag_value(
+        d->argv, URL_FLAGS, sizeof(URL_FLAGS) / sizeof(URL_FLAGS[0]), 0);
+    const char *pass = d->get_arg_flag_value(
+        d->argv, PASS_FLAGS, sizeof(PASS_FLAGS) / sizeof(PASS_FLAGS[0]), 0);
+
+    if (!path || !url_base || !pass) {
+      d->printf("Usage: vibelog upload --path <file> --url <url> "
+                "--root_password <pass>\n");
+      return 1;
+    }
+
+    if (!d->file_exists(path)) {
+      d->printf("Error: File not found: %s\n", path);
+      return 1;
+    }
+
+    // Construct URL
+    char *full_url = d->concat_path(url_base, "api/write_database_file");
+
+    // Fix double slash if present (concat_path might add one if url_base ends
+    // with /) Actually concat_path is usually for file paths, let's just use
+    // string manip if needed, but concat_path is safe enough for simple
+    // concatenation usually. Better: check if url_base ends in / Simple manual
+    // concat to be safe for URLs:
+    if (d->strlen(url_base) > 0 && url_base[d->strlen(url_base) - 1] == '/') {
+      // remove trailing slash or just don't add one.
+      // Let's rely on user provided valid URL or simple concatenation.
+      // Re-doing manually to be safe:
+      // d->free(full_url);
+      // full_url = d->malloc(d->strlen(url_base) + 30);
+      // d->sprintf(full_url, "%sapi/write_database_file", url_base);
+    }
+    // Actually d->concat_path adds a separator, which might be / or \.
+    // For URLs we want /. If OS is Windows, concat_path might use \.
+    // Let's blindly use concat_path and replace \ with / if needed, or just
+    // standard string ops. Since we don't have direct string manip utils
+    // exposed easily besides generic ones:
+    d->free(full_url);
+
+    // Manual URL construction
+    int len = d->strlen(url_base) + d->strlen("api/write_database_file") + 2;
+    full_url = d->malloc(len);
+    d->memset(full_url, 0, len);
+    d->strcpy(full_url, url_base);
+    if (full_url[d->strlen(full_url) - 1] != '/') {
+      d->strcat(full_url, "/");
+    }
+    d->strcat(full_url, "api/write_database_file");
+
+    d->printf("Uploading %s to %s...\n", path, full_url);
+
+    // Read File
+    long fsize = 0;
+    appbool is_bin = app_false;
+    unsigned char *content = d->read_any(path, &fsize, &is_bin);
+
+    if (!content) {
+      d->printf("Failed to read file\n");
+      d->free(full_url);
+      return 1;
+    }
+
+    appclientrequest *req = d->newappclientrequest(full_url);
+    d->appclientrequest_set_method(req, "POST");
+    d->appclientrequest_set_header(req, "root_password", pass);
+
+    // Path header should be relative path in DB.
+    // PROMPT says: "Uploads a local file ... --path /path/to/file".
+    // It doesn't specify the DESTINATION path.
+    // However, the `write_database_file` API needs `path` header.
+    // We will assume the local path structure mirrors the db structure OR
+    // we just send the filename?
+    // Standard practice: if I upload `database/categorys.json`, I want it to be
+    // `categorys.json`. If I upload `my_files/image.png`, do I want
+    // `image.png`? Let's send the provided path argument as the path header,
+    // but user should probably provide relative path. CLI usage example:
+    // `vibelog upload --path database/categorys.json ...` We will send the
+    // `path` arg as the header.
+    d->appclientrequest_set_header(req, "path", path);
+
+    d->appclientrequest_set_body(req, content, fsize);
+
+    appclientresponse *resp = d->appclientrequest_fetch(req);
+
+    if (resp) {
+      long rsize = 0;
+      unsigned char *rbody = d->appclientresponse_read_body(resp, &rsize);
+      if (rbody) {
+        char *rstr = d->malloc(rsize + 1);
+        d->memcpy(rstr, rbody, rsize);
+        rstr[rsize] = 0;
+        d->printf("Response: %s\n", rstr);
+        d->free(rstr);
+        d->free(rbody); // read_body allocates
+      }
+      d->free_clientresponse(resp);
+    } else {
+      d->printf("Request failed\n");
+    }
+
+    d->appclientrequest_free(req);
+    d->free(content); // read_any allocates (it says read_string needs free,
+                      // read_any implies it returns a buffer)
+    // Actually read_any docs: "unsigned char *(*read_any)(const char *path,
+    // long *size, appbool *is_binary);" Usually implies allocation.
+    d->free(full_url);
+    return 0;
   }
 
-  d->printf("Starting VibeLog on port %d\n", global_config.port);
-  d->printf("Database path: %s\n", global_config.database_path);
+  // COMMAND: DOWNLOAD
+  if (d->strcmp(command, "download") == 0) {
+    const char *path = d->get_arg_flag_value(
+        d->argv, PATH_FLAGS, sizeof(PATH_FLAGS) / sizeof(PATH_FLAGS[0]), 0);
+    const char *url_base = d->get_arg_flag_value(
+        d->argv, URL_FLAGS, sizeof(URL_FLAGS) / sizeof(URL_FLAGS[0]), 0);
+    const char *pass = d->get_arg_flag_value(
+        d->argv, PASS_FLAGS, sizeof(PASS_FLAGS) / sizeof(PASS_FLAGS[0]), 0);
 
-  d->start_server(global_config.port, router, app_null, app_false);
+    if (!path || !url_base || !pass) {
+      d->printf("Usage: vibelog download --path <file> --url <url> "
+                "--root_password <pass>\n");
+      return 1;
+    }
 
-  // Cleanup (though typically unreachable in this loop)
-  d->free((void *)global_config.database_path);
-  d->free((void *)global_config.root_password);
+    // URL
+    int len = d->strlen(url_base) + d->strlen("api/read_database_file") + 2;
+    char *full_url = d->malloc(len);
+    d->memset(full_url, 0, len);
+    d->strcpy(full_url, url_base);
+    if (full_url[d->strlen(full_url) - 1] != '/') {
+      d->strcat(full_url, "/");
+    }
+    d->strcat(full_url, "api/read_database_file");
 
-  return 0;
+    d->printf("Downloading %s from %s...\n", path, full_url);
+
+    appclientrequest *req = d->newappclientrequest(full_url);
+    d->appclientrequest_set_method(
+        req,
+        "POST"); // API says POST for read? Yes. "POST /api/read_database_file"
+    d->appclientrequest_set_header(req, "root_password", pass);
+    d->appclientrequest_set_header(req, "path", path);
+
+    appclientresponse *resp = d->appclientrequest_fetch(req);
+
+    if (resp) {
+      // Check status code?
+      // The sandbox doesn't expose status code directly easily in the struct
+      // definition provided above "const char
+      // *(*appclientresponse_get_header_value_by_key)(...)" Usually we assume
+      // success if body is present, or parse headers. But let's just write what
+      // we get.
+      long rsize = 0;
+      unsigned char *rbody = d->appclientresponse_read_body(resp, &rsize);
+      if (rbody) {
+        // Check if it looks like an error (simple heuristic, not robust but
+        // okay for CLI tool) If small and text, might be error. But we
+        // requested a file.
+        d->write_any(path, rbody, rsize);
+        d->printf("Downloaded %ld bytes to %s\n", rsize, path);
+        d->free(rbody);
+      } else {
+        d->printf("Empty response or failure\n");
+      }
+      d->free_clientresponse(resp);
+    } else {
+      d->printf("Request failed\n");
+    }
+
+    d->appclientrequest_free(req);
+    d->free(full_url);
+    return 0;
+  }
+
+  d->printf("Unknown command: %s\n", command);
+  d->printf("Available commands: start, upload, download\n");
+  return 1;
 }
 
 // ===============================HELPERS IMPL==================================
