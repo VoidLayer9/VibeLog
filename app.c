@@ -1521,13 +1521,43 @@ int appmain(appdeps *d) {
   if (!command) {
     d->printf("Usage: vibelog <command> [options]\n");
     d->printf("Commands:\n");
-    d->printf("  start     Start the server (requires --database-path and "
-              "--root-password)\n");
-    d->printf("  upload    Upload a file (requires --path, --url, "
-              "--root-password, optional --cache-dir)\n");
-    d->printf("  download  Download a file (requires --path, --url, "
-              "--root-password, optional --cache-dir)\n");
+    d->printf("  start              Start the server\n");
+    d->printf("  upload-articles    Upload articles to remote\n");
+    d->printf("  download-articles  Download articles from remote\n");
+    d->printf("  upload-authors     Upload authors to remote\n");
+    d->printf("  download-authors   Download authors from remote\n");
+    d->printf("  upload-metrics     Upload metrics to remote\n");
+    d->printf("  download-metrics   Download metrics from remote\n");
+    d->printf(
+        "  upload-config      Upload config (and about.html) to remote\n");
+    d->printf("  download-config    Download config from remote\n");
     return 1;
+  }
+
+  // Common Argument Parsing for Sync
+  const char *db_path = d->get_arg_flag_value(
+      d->argv, DB_FLAGS, sizeof(DB_FLAGS) / sizeof(DB_FLAGS[0]), 0);
+
+  // Default db_path if not provided
+  char *eff_db_path = app_null;
+  if (db_path) {
+    eff_db_path = d->strdup(db_path);
+  } else {
+    eff_db_path = d->strdup("database");
+  }
+
+  const char *url_base = d->get_arg_flag_value(
+      d->argv, URL_FLAGS, sizeof(URL_FLAGS) / sizeof(URL_FLAGS[0]), 0);
+  const char *pass = d->get_arg_flag_value(
+      d->argv, PASS_FLAGS, sizeof(PASS_FLAGS) / sizeof(PASS_FLAGS[0]), 0);
+  const char *cache_val = d->get_arg_flag_value(
+      d->argv, CACHE_FLAGS, sizeof(CACHE_FLAGS) / sizeof(CACHE_FLAGS[0]), 0);
+
+  char *eff_cache_dir = app_null;
+  if (cache_val) {
+    eff_cache_dir = d->strdup(cache_val);
+  } else {
+    eff_cache_dir = d->strdup(".vibelog_cache");
   }
 
   // COMMAND: START
@@ -1540,25 +1570,16 @@ int appmain(appdeps *d) {
       global_config.port = d->atoi(start_port);
     }
 
-    // Parse Database Path
-    const char *db_path = d->get_arg_flag_value(
-        d->argv, DB_FLAGS, sizeof(DB_FLAGS) / sizeof(DB_FLAGS[0]), 0);
-    if (db_path) {
-      global_config.database_path = d->strdup(db_path);
-    } else {
-      d->printf("Error: --database-path is required for start command.\n");
-      return 1;
-    }
+    // DB Path is already parsed into eff_db_path
+    global_config.database_path = eff_db_path;
 
     // Parse Root Password
-    const char *root_pass = d->get_arg_flag_value(
-        d->argv, PASS_FLAGS, sizeof(PASS_FLAGS) / sizeof(PASS_FLAGS[0]), 0);
-    if (root_pass) {
-      global_config.root_password = d->strdup(root_pass);
+    if (pass) {
+      global_config.root_password = d->strdup(pass);
     } else {
       d->printf("Error: --root-password is required for start command.\n");
-      // Clean up previously allocated db_path
-      d->free((void *)global_config.database_path);
+      d->free(eff_db_path);
+      d->free(eff_cache_dir);
       return 1;
     }
 
@@ -1570,112 +1591,67 @@ int appmain(appdeps *d) {
     // Cleanup (unreachable)
     d->free((void *)global_config.database_path);
     d->free((void *)global_config.root_password);
+    d->free(eff_cache_dir);
     return 0;
   }
 
-  // COMMAND: UPLOAD
-  if (d->strcmp(command, "upload") == 0) {
-    const char *db_path = d->get_arg_flag_value(
-        d->argv, DB_FLAGS, sizeof(DB_FLAGS) / sizeof(DB_FLAGS[0]), 0);
-    // Removed fallback to PATH_FLAGS
-
-    const char *url_base = d->get_arg_flag_value(
-        d->argv, URL_FLAGS, sizeof(URL_FLAGS) / sizeof(URL_FLAGS[0]), 0);
-    const char *pass = d->get_arg_flag_value(
-        d->argv, PASS_FLAGS, sizeof(PASS_FLAGS) / sizeof(PASS_FLAGS[0]), 0);
-
-    if (!db_path || !url_base || !pass) {
-      d->printf("Usage: vibelog upload --database-path <dir> --url <url> "
-                "--root-password <pass> [--path <subdir>]\n");
+  // SYNC COMMANDS WRAPPERS
+  if (d->strstr(command, "upload-") == command ||
+      d->strstr(command, "download-") == command) {
+    if (!url_base || !pass) {
+      d->printf(
+          "Error: --url and --root-password are required for sync commands.\n");
+      d->free(eff_db_path);
+      d->free(eff_cache_dir);
       return 1;
     }
 
-    if (!d->dir_exists(db_path)) {
-      d->printf("Error: Directory not found: %s\n", db_path);
-      return 1;
-    }
-
-    const char *cache_val = d->get_arg_flag_value(
-        d->argv, CACHE_FLAGS, sizeof(CACHE_FLAGS) / sizeof(CACHE_FLAGS[0]), 0);
-    if (cache_val) {
-      global_config.cache_dir = d->strdup(cache_val);
-    } else {
-      global_config.cache_dir = d->strdup(".vibelog_cache");
-    }
-
-    // Parse sub path
-    const char *sub_path_val = d->get_arg_flag_value(
-        d->argv, PATH_FLAGS, sizeof(PATH_FLAGS) / sizeof(PATH_FLAGS[0]), 0);
-    const char *sub_path = app_null;
-    if (sub_path_val) {
-      if (d->strcmp(sub_path_val, "/") == 0) {
-        sub_path = app_null;
-      } else if (sub_path_val[0] == '/') {
-        // Safe since d->argv strings are persistent
-        sub_path = sub_path_val + 1;
+    if (!d->dir_exists(eff_db_path)) {
+      // For download we might create it, but for upload it must exist
+      if (d->strstr(command, "download-") == command) {
+        d->create_dir(eff_db_path);
       } else {
-        sub_path = sub_path_val;
+        d->printf("Error: Database directory not found: %s\n", eff_db_path);
+        d->free(eff_db_path);
+        d->free(eff_cache_dir);
+        return 1;
       }
     }
 
-    perform_upload_sync(d, db_path, url_base, pass, global_config.cache_dir,
-                        sub_path);
-    d->free((void *)global_config.cache_dir); // Cleanup
-    return 0;
-  }
-
-  // COMMAND: DOWNLOAD
-  if (d->strcmp(command, "download") == 0) {
-    const char *db_path = d->get_arg_flag_value(
-        d->argv, DB_FLAGS, sizeof(DB_FLAGS) / sizeof(DB_FLAGS[0]), 0);
-    // Removed fallback
-
-    const char *url_base = d->get_arg_flag_value(
-        d->argv, URL_FLAGS, sizeof(URL_FLAGS) / sizeof(URL_FLAGS[0]), 0);
-    const char *pass = d->get_arg_flag_value(
-        d->argv, PASS_FLAGS, sizeof(PASS_FLAGS) / sizeof(PASS_FLAGS[0]), 0);
-
-    if (!db_path || !url_base || !pass) {
-      d->printf("Usage: vibelog download --database-path <dir> --url <url> "
-                "--root-password <pass>\n");
+    const char *target_sub = app_null;
+    if (d->strstr(command, "articles"))
+      target_sub = "articles";
+    else if (d->strstr(command, "authors"))
+      target_sub = "authors";
+    else if (d->strstr(command, "metrics"))
+      target_sub = "metrics";
+    else if (d->strstr(command, "config"))
+      target_sub = "config";
+    else {
+      d->printf("Unknown sync target in command: %s\n", command);
+      d->free(eff_db_path);
+      d->free(eff_cache_dir);
       return 1;
     }
 
-    // Create dir if not exists?
-    if (!d->dir_exists(db_path)) {
-      d->create_dir(db_path);
-    }
-
-    const char *cache_val = d->get_arg_flag_value(
-        d->argv, CACHE_FLAGS, sizeof(CACHE_FLAGS) / sizeof(CACHE_FLAGS[0]), 0);
-    if (cache_val) {
-      global_config.cache_dir = d->strdup(cache_val);
+    if (d->strstr(command, "upload-") == command) {
+      perform_upload_sync(d, eff_db_path, url_base, pass, eff_cache_dir,
+                          target_sub);
     } else {
-      global_config.cache_dir = d->strdup(".vibelog_cache");
+      perform_download_sync(d, eff_db_path, url_base, pass, eff_cache_dir,
+                            target_sub);
     }
 
-    // Parse sub path
-    const char *sub_path_val = d->get_arg_flag_value(
-        d->argv, PATH_FLAGS, sizeof(PATH_FLAGS) / sizeof(PATH_FLAGS[0]), 0);
-    const char *sub_path = app_null;
-    if (sub_path_val) {
-      if (d->strcmp(sub_path_val, "/") == 0) {
-        sub_path = app_null;
-      } else if (sub_path_val[0] == '/') {
-        sub_path = sub_path_val + 1;
-      } else {
-        sub_path = sub_path_val;
-      }
-    }
-
-    perform_download_sync(d, db_path, url_base, pass, global_config.cache_dir,
-                          sub_path);
-    d->free((void *)global_config.cache_dir); // Cleanup
+    d->free(eff_db_path);
+    d->free(eff_cache_dir);
     return 0;
   }
 
   d->printf("Unknown command: %s\n", command);
-  d->printf("Available commands: start, upload, download\n");
+  d->printf(
+      "Available commands: start, upload-articles, download-articles, ...\n");
+  d->free(eff_db_path);
+  d->free(eff_cache_dir);
   return 1;
 }
 

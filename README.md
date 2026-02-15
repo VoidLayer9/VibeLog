@@ -77,30 +77,30 @@ VibeLog includes a CLI for starting the server and managing content synchronizat
 Run the blog locally or in production:
 
 ```bash
-./vibelog start --port 8080 --database-path ./database --root-password secret_pass
+./vibelog start --port 8080 --root-password secret_pass [--database-path ./database]
 ```
 
 *   `--port`: Port to listen on (default: 8080).
-*   `--database-path`: Path to the database folder (required).
 *   `--root-password`: Admin password for API operations (required).
+*   `--database-path`: Path to the database folder (optional, default: `./database`).
 
-### 2. Upload Content (Sync Up)
-Upload a local file or directory to a remote VibeLog instance:
+### 2. Synchronization (Upload/Download)
+Manage specific resources using dedicated commands. All commands require `--url` and `--root-password`. The `--database-path` is optional (default: `./database`).
 
+**Available Commands:**
+*   `upload-articles` / `download-articles`
+*   `upload-authors` / `download-authors`
+*   `upload-metrics` / `download-metrics`
+*   `upload-config` / `download-config`
+
+**Example: Upload Articles**
 ```bash
-./vibelog upload --path database/articles/new-post --url http://remote-server:8080 --root-password secret_pass
+./vibelog upload-articles --url http://remote-server:8080 --root-password secret_pass
 ```
 
-*   `--path`: Local path to upload.
-*   `--url`: URL of the remote server.
-*   `--root-password`: Must match the remote server's password.
-*   `--path` (optional): Sync only a specific subdirectory (e.g., `articles` or `authors`).
-
-### 3. Download Content (Sync Down)
-Download files from a remote instance to your local environment:
-
+**Example: Download Config**
 ```bash
-./vibelog download --database-path ./database --url http://remote-server:8080 --root-password secret_pass [--path articles]
+./vibelog download-config --url http://remote-server:8080 --root-password secret_pass
 ```
 
 ---
@@ -164,7 +164,10 @@ The project relies on a strict filesystem hierarchy:
 
 ```
 database/
-├── categorys.json          # Global category definitions
+├── config/                 # Configuration & Assets
+│   ├── categorys.json      # Global category definitions
+│   ├── style.css           # Global styles
+│   └── about.html          # About page content
 ├── articles/               # Article content
 │   └── DD-MM-YYYY/
 │       └── <article_id>/
@@ -176,7 +179,7 @@ database/
 │       ├── data.json
 │       └── assets/picture.jpg
 ├── metrics/                # View analytics (auto-generated)
-└── pages/                  # Static pages (e.g., about.html)
+└── pages/                  # (Empty/Deprecated)
 ```
 
 For detailed schema specifications, see [prompts/2.project.md](prompts/2.project.md).

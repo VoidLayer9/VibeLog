@@ -1,7 +1,11 @@
 {
     "title": "The Unix Philosophy: Ancient Wisdom",
-    "summary": "Do one thing and do it well. Text streams as universal interfaces.",
+    "summary": "1 Do one thing and do it well. Text streams as universal interfaces.",
     "author_id": "cipher_9",
     "thumbnail": "assets/thumbnail.jpg",
-    "categories": ["architecture", "linux", "history"]
+    "categories": [
+        "architecture",
+        "linux",
+        "history"
+    ]
 }
