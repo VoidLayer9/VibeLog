@@ -1,7 +1,8 @@
-// silver_chain_scope_start
-// mannaged by silver chain: https://github.com/OUIsolutions/SilverChain
+//silver_chain_scope_start
+//mannaged by silver chain: https://github.com/OUIsolutions/SilverChain
 #include "imports/imports.globals.h"
-// silver_chain_scope_end
+//silver_chain_scope_end
+
 
 int wrapper_snprintf(char *str, unsigned long size, const char *format, ...) {
   va_list args;
@@ -47,10 +48,6 @@ int wrapper_memcmp(const void *s1, const void *s2, unsigned long n) {
   return memcmp(s1, s2, (size_t)n);
 }
 
-char *wrapper_strcpy(char *dst, const char *src) {
-  return strcpy(dst, src);
-}
+char *wrapper_strcpy(char *dst, const char *src) { return strcpy(dst, src); }
 
-char *wrapper_strcat(char *dst, const char *src) {
-  return strcat(dst, src);
-}
+char *wrapper_strcat(char *dst, const char *src) { return strcat(dst, src); }

@@ -107,25 +107,39 @@ int wrapper_json_get_object_size(const void *object);
 const unsigned char *wrapper_get_asset_content(const char *path,long *size,int *is_binary);
 void *wrapper_list_assets(const char *path);
 //fdefine.https_client.c
-void *wrapper_newhttpclient(const char *url);
-void wrapper_httpclient_set_method(void *client,const char *method);
-void wrapper_httpclient_set_max_redirections(void *client,int max_redirections);
-void * wrapper_httpclient_fetch(void *client);
-int wrapper_httpclient_response_get_status_code(void *response);
 
-unsigned char * wrapper_httpclient_response_read_body(void *response,long *size);
-long wrapper_httpclient_response_get_body_size(void *response);
 
-int wrapper_httpclient_response_get_header_size(void *response);
-void wrapper_httpclient_set_header(void *client, const char *key, const char *value);
-void wrapper_httpclient_set_body(void *client, unsigned char *content, long size);
-void wrapper_httpclient_free(void *client);
+void *wrapper_newhttpclient(const char *url) ;
+void wrapper_httpclient_set_method(void *client, const char *method) ;
+void wrapper_httpclient_set_max_redirections(void *client,
+                                             int max_redirections) ;
+void *wrapper_httpclient_fetch(void *client) ;
+int wrapper_httpclient_response_get_status_code(void *response) ;
 
-char *wrapper_httpclient_response_get_header_value_by_key(void *response, const char *key);
-const char *wrapper_httpclient_response_get_header_key_by_index(void *response, int index);
-const char *wrapper_httpclient_response_get_header_value_by_index(void *response, int index);
+const unsigned char *wrapper_httpclient_response_read_body(void *response,
+                                                           long *size) ;
+long wrapper_httpclient_response_get_body_size(void *response) ;
 
-void wrapper_httpclient_response_free(void *response);//fdefine.time.c
+int wrapper_httpclient_response_get_header_size(void *response) ;
+void wrapper_httpclient_set_header(void *client, const char *key,
+                                   const char *value) ;
+void wrapper_httpclient_set_body(void *client, unsigned char *content,
+                                 long size) ;
+void wrapper_httpclient_free(void *client) ;
+
+const char *
+wrapper_httpclient_response_get_header_value_by_key(void *response,
+                                                    const char *key) ;
+const char *wrapper_httpclient_response_get_header_key_by_index(void *response,
+                                                                int index) ;
+const char *
+wrapper_httpclient_response_get_header_value_by_index(void *response,
+                                                      int index) ;
+
+void wrapper_httpclient_response_free(void *response) ;
+
+int wrapper_httpclient_response_get_header_count(void *response) ;
+//fdefine.time.c
 
 #include <time.h>
 
@@ -222,6 +236,7 @@ int wrapper_start_server(int port, const appserverresponse *(*handler)(appdeps *
 CwebHttpResponse *main_internal_server_firmware(CwebHttpRequest *request, int argc, char *argv[]) ;
 //fdefine.std.c
 
+
 int wrapper_snprintf(char *str, unsigned long size, const char *format, ...) ;
 int wrapper_sprintf(char *str, const char *format, ...) ;
 unsigned long wrapper_strlen(const char *s) ;
@@ -244,7 +259,8 @@ int wrapper_memcmp(const void *s1, const void *s2, unsigned long n) ;
 
 char *wrapper_strcpy(char *dst, const char *src) ;
 
-char *wrapper_strcat(char *dst, const char *src) ;//fdefine.text_stack.c
+char *wrapper_strcat(char *dst, const char *src) ;
+//fdefine.text_stack.c
 
 
 void *wrapper_new_text_stack(const char *text) ;

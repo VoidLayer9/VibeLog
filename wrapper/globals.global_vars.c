@@ -1,7 +1,7 @@
-// silver_chain_scope_start
-// mannaged by silver chain: https://github.com/OUIsolutions/SilverChain
+//silver_chain_scope_start
+//mannaged by silver chain: https://github.com/OUIsolutions/SilverChain
 #include "imports/imports.fdeclare.h"
-// silver_chain_scope_end
+//silver_chain_scope_end
 
 const appserverresponse *(*global_app_handler)(appdeps *d, void *props) = NULL;
 void *global_app_props = NULL;
@@ -168,6 +168,10 @@ appdeps global_appdeps = {
         wrapper_httpclient_response_get_body_size,
     .appclientresponse_get_header_value_by_key =
         wrapper_httpclient_response_get_header_value_by_key,
+    .appcliente_response_get_headder_count =
+        wrapper_httpclient_response_get_header_count,
+    .appclientresponse_get_status_code =
+        wrapper_httpclient_response_get_status_code,
     .appclientresponse_get_header_key_by_index =
         wrapper_httpclient_response_get_header_key_by_index,
     .appclientresponse_get_header_value_by_index =

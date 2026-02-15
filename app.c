@@ -253,7 +253,10 @@ struct appdeps {
 
   appclientresponse *(*appclientrequest_fetch)(
       appclientrequest *appclientrequest);
-
+  int (*appclientresponse_get_status_code)(
+      appclientresponse *appclientresponse);
+  int (*appcliente_response_get_headder_count)(
+      appclientresponse *appclientresponse);
   const unsigned char *(*appclientresponse_read_body)(
       appclientresponse *appclientresponse, long *size);
   long (*appclientresponse_get_body_size)(appclientresponse *appclientresponse);
@@ -1133,14 +1136,13 @@ int appmain(appdeps *d) {
 
     if (resp) {
       long rsize = 0;
-      unsigned char *rbody = d->appclientresponse_read_body(resp, &rsize);
+      const unsigned char *rbody = d->appclientresponse_read_body(resp, &rsize);
       if (rbody) {
         char *rstr = d->malloc(rsize + 1);
         d->custom_memcpy(rstr, rbody, rsize);
         rstr[rsize] = 0;
         d->printf("Response: %s\n", rstr);
         d->free(rstr);
-        d->free(rbody); // read_body allocates
       }
       d->free_clientresponse(resp);
     } else {
@@ -1200,14 +1202,13 @@ int appmain(appdeps *d) {
       // success if body is present, or parse headers. But let's just write what
       // we get.
       long rsize = 0;
-      unsigned char *rbody = d->appclientresponse_read_body(resp, &rsize);
+      const unsigned char *rbody = d->appclientresponse_read_body(resp, &rsize);
       if (rbody) {
         // Check if it looks like an error (simple heuristic, not robust but
         // okay for CLI tool) If small and text, might be error. But we
         // requested a file.
         d->write_any(path, rbody, rsize);
         d->printf("Downloaded %ld bytes to %s\n", rsize, path);
-        d->free(rbody);
       } else {
         d->printf("Empty response or failure\n");
       }
