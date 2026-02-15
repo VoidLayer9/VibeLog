@@ -635,9 +635,26 @@ const appserverresponse *handle_home(appdeps *d, const appserverrequest *req) {
       const char *id =
           d->json_get_string_value(d->json_get_object_item(art, "id"));
 
+      const char *thumbnail =
+          d->json_get_string_value(d->json_get_object_item(art, "thumbnail"));
+
       d->ctext_append(t, "<div class='card'>");
-      d->ctext_append(t,
-                      "<div class='card-image'></div>"); // Placeholder for now
+      if (thumbnail) {
+        d->ctext_append(
+            t,
+            "<div class='card-image'><img src='/database_file?path=articles/");
+        d->ctext_append(t, date);
+        d->ctext_append(t, "/");
+        d->ctext_append(t, id);
+        d->ctext_append(t, "/");
+        d->ctext_append(t, thumbnail);
+        d->ctext_append(
+            t, "' style='width:100%; height:200px; object-fit:cover;' alt='");
+        d->ctext_append(t, title);
+        d->ctext_append(t, "'></div>");
+      } else {
+        d->ctext_append(t, "<div class='card-image'></div>");
+      }
       d->ctext_append(t, "<h2 class='card-title'><a href='/article?date=");
       d->ctext_append(t, date);
       d->ctext_append(t, "&id=");
@@ -731,8 +748,26 @@ const appserverresponse *handle_list_articles(appdeps *d,
       const char *id =
           d->json_get_string_value(d->json_get_object_item(art, "id"));
 
+      const char *thumbnail =
+          d->json_get_string_value(d->json_get_object_item(art, "thumbnail"));
+
       d->ctext_append(t, "<div class='card'>");
-      d->ctext_append(t, "<div class='card-image'></div>");
+      if (thumbnail) {
+        d->ctext_append(
+            t,
+            "<div class='card-image'><img src='/database_file?path=articles/");
+        d->ctext_append(t, date);
+        d->ctext_append(t, "/");
+        d->ctext_append(t, id);
+        d->ctext_append(t, "/");
+        d->ctext_append(t, thumbnail);
+        d->ctext_append(
+            t, "' style='width:100%; height:200px; object-fit:cover;' alt='");
+        d->ctext_append(t, title);
+        d->ctext_append(t, "'></div>");
+      } else {
+        d->ctext_append(t, "<div class='card-image'></div>");
+      }
       d->ctext_append(t, "<h2 class='card-title'><a href='/article?date=");
       d->ctext_append(t, date);
       d->ctext_append(t, "&id=");
