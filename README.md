@@ -94,12 +94,13 @@ Upload a local file or directory to a remote VibeLog instance:
 *   `--path`: Local path to upload.
 *   `--url`: URL of the remote server.
 *   `--root-password`: Must match the remote server's password.
+*   `--path` (optional): Sync only a specific subdirectory (e.g., `articles` or `authors`).
 
 ### 3. Download Content (Sync Down)
 Download files from a remote instance to your local environment:
 
 ```bash
-./vibelog download --path database --url http://remote-server:8080 --root-password secret_pass
+./vibelog download --database-path ./database --url http://remote-server:8080 --root-password secret_pass [--path articles]
 ```
 
 ---

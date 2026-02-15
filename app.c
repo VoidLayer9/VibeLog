@@ -1044,14 +1044,13 @@ const appserverresponse *router(appdeps *d, void *props) {
 
 // Fetch remote file list recursively
 appjson *fetch_remote_file_list(appdeps *d, const char *url_base,
-                                const char *pass) {
+                                const char *pass, const char *sub_path) {
   // Construct URL: url_base + /api/list_database_files_recursively
   // url_base might fail if it doesn't end with / or if it has query params
   // simple concat for now
   char *full_url =
       d->concat_path(url_base, "api/list_database_files_recursively");
   // concat_path might use system separator, ensure / for URL
-  // But wait, concat_path is system dependent.
   // Better use manual concat.
   d->free(full_url);
 
@@ -1068,7 +1067,10 @@ appjson *fetch_remote_file_list(appdeps *d, const char *url_base,
   appclientrequest *req = d->newappclientrequest(full_url);
   d->appclientrequest_set_method(req, "POST"); // API says POST
   d->appclientrequest_set_header(req, "root-password", pass);
-  // No path header needed for full recursive list from root
+
+  if (sub_path && d->strlen(sub_path) > 0) {
+    d->appclientrequest_set_header(req, "path", sub_path);
+  }
 
   appclientresponse *resp = d->appclientrequest_fetch(req);
   appjson *result = app_null;
@@ -1110,12 +1112,21 @@ appjson *fetch_remote_file_list(appdeps *d, const char *url_base,
 // Get local file list with SHAs
 // Get local file list with SHAs
 appjson *get_local_file_list(appdeps *d, const char *base_path,
-                             const char *cache_dir) {
-  appstringarray *files = d->list_files_recursively(base_path);
+                             const char *cache_dir, const char *sub_path) {
+  char *target_path = d->strdup(base_path);
+  if (sub_path && d->strlen(sub_path) > 0) {
+    char *tmp = d->concat_path(base_path, sub_path);
+    d->free(target_path);
+    target_path = tmp;
+  }
+
+  appstringarray *files = d->list_files_recursively(target_path);
   appjson *arr = d->json_create_array();
 
-  if (!files)
+  if (!files) {
+    d->free(target_path);
     return arr;
+  }
 
   long count = d->get_stringarray_size(files);
   for (int i = 0; i < count; i++) {
@@ -1124,22 +1135,10 @@ appjson *get_local_file_list(appdeps *d, const char *base_path,
     d->json_add_string_to_object(obj, "file", f);
 
     // Calc SHA using cache
-    char *full_path = d->concat_path(base_path, f);
-    // Use .vibelog_cache in the same directory as the executable?
-    // Or in the base_path's parent?
-    // Let's use a fixed cache dir relative to base_path for now:
-    // base_path/.vibelog_cache Actually the tool
-    // char *sha = d->get_cached_file_sha(cache_dir, filepath)
-    // char *cache_dir = d->concat_path(base_path, ".vibelog_cache");
-
-    // We shouldn't list files inside .vibelog_cache though.
-    // list_files_recursively might include them if not careful.
-    // The problem is subsequent runs.
-    // We should filter out .vibelog_cache if list_files_recursively returns it.
+    char *full_path = d->concat_path(target_path, f);
 
     if (d->strstr(f, ".vibelog_cache")) {
       d->free(full_path);
-      // d->free(cache_dir); // cache_dir is passed in now, don't free it here
       d->json_delete(obj);
       continue;
     }
@@ -1155,11 +1154,10 @@ appjson *get_local_file_list(appdeps *d, const char *base_path,
     }
 
     d->json_add_item_to_array(arr, obj);
-
-    // d->free(cache_dir);
     d->free(full_path);
   }
   d->delete_stringarray(files);
+  d->free(target_path);
   return arr;
 }
 
@@ -1183,19 +1181,27 @@ appjson *find_file_obj(appdeps *d, appjson *arr, const char *filepath) {
 // DOWNLOAD SYNC
 void perform_download_sync(appdeps *d, const char *local_path,
                            const char *url_base, const char *pass,
-                           const char *cache_dir) {
+                           const char *cache_dir, const char *sub_path) {
   d->printf("Fetching remote file list...\n");
-  appjson *remote_list = fetch_remote_file_list(d, url_base, pass);
+  appjson *remote_list = fetch_remote_file_list(d, url_base, pass, sub_path);
   if (!remote_list) {
     d->printf("Failed to fetch remote list.\n");
     return;
   }
 
   d->printf("Scanning local files...\n");
-  appjson *local_list = get_local_file_list(d, local_path, cache_dir);
+  appjson *local_list = get_local_file_list(d, local_path, cache_dir, sub_path);
 
   int count = d->json_get_array_size(remote_list);
   d->printf("Found %d remote files. Synchronizing...\n", count);
+
+  // Determine local target directory for ops
+  char *target_dir = d->strdup(local_path);
+  if (sub_path && d->strlen(sub_path) > 0) {
+    char *tmp = d->concat_path(local_path, sub_path);
+    d->free(target_dir);
+    target_dir = tmp;
+  }
 
   int downloaded = 0;
   int skipped = 0;
@@ -1223,7 +1229,7 @@ void perform_download_sync(appdeps *d, const char *local_path,
       d->printf("Downloading %s...\n", f);
 
       // Prepare download URL
-      // POST /api/read_database_file with header path=f
+      // POST /api/read_database_file with header path=f (relative to DB root)
       int len = d->strlen(url_base) + d->strlen("api/read_database_file") + 2;
       char *d_url = d->malloc(len);
       d->custom_memset(d_url, 0, len);
@@ -1236,7 +1242,15 @@ void perform_download_sync(appdeps *d, const char *local_path,
       appclientrequest *req = d->newappclientrequest(d_url);
       d->appclientrequest_set_method(req, "POST");
       d->appclientrequest_set_header(req, "root-password", pass);
-      d->appclientrequest_set_header(req, "path", f);
+
+      // Calculate effective remote path
+      if (sub_path && d->strlen(sub_path) > 0) {
+        char *eff_path = d->concat_path(sub_path, f);
+        d->appclientrequest_set_header(req, "path", eff_path);
+        d->free(eff_path);
+      } else {
+        d->appclientrequest_set_header(req, "path", f);
+      }
 
       appclientresponse *resp = d->appclientrequest_fetch(req);
       if (resp) {
@@ -1246,7 +1260,7 @@ void perform_download_sync(appdeps *d, const char *local_path,
           const unsigned char *rbody =
               d->appclientresponse_read_body(resp, &rsize);
           if (rbody) { // Check if we actually got content
-            char *save_path = d->concat_path(local_path, f);
+            char *save_path = d->concat_path(target_dir, f);
             d->write_any(save_path, rbody, rsize);
             d->free(save_path);
             downloaded++;
@@ -1277,8 +1291,6 @@ void perform_download_sync(appdeps *d, const char *local_path,
     const char *f =
         d->json_get_string_value(d->json_get_object_item(l_item, "file"));
 
-    // Skip hidden files or cache (should already be filtered by
-    // get_local_file_list mostly, but safe to check)
     if (d->strstr(f, ".vibelog_cache") || d->strstr(f, ".DS_Store")) {
       continue;
     }
@@ -1287,9 +1299,9 @@ void perform_download_sync(appdeps *d, const char *local_path,
     if (!r_item) {
       // File exists locally but not remotely -> Delete it
       d->printf("Deleting local file %s (not on server)...\n", f);
-      char *full_path = d->concat_path(local_path, f);
+      char *full_path = d->concat_path(target_dir, f);
       d->delete_any(full_path);
-      cleanup_empty_parents(d, full_path, local_path); // Cleanup dirs
+      cleanup_empty_parents(d, full_path, target_dir); // Cleanup dirs
       d->free(full_path);
       deleted++;
     }
@@ -1299,25 +1311,33 @@ void perform_download_sync(appdeps *d, const char *local_path,
             downloaded, skipped, deleted);
   d->json_delete(remote_list);
   d->json_delete(local_list);
+  d->free(target_dir);
 }
 
 // UPLOAD SYNC
 // UPLOAD SYNC
 void perform_upload_sync(appdeps *d, const char *local_path,
                          const char *url_base, const char *pass,
-                         const char *cache_dir) {
+                         const char *cache_dir, const char *sub_path) {
   d->printf("Fetching remote file list...\n");
-  appjson *remote_list = fetch_remote_file_list(d, url_base, pass);
+  appjson *remote_list = fetch_remote_file_list(d, url_base, pass, sub_path);
   if (!remote_list) {
     d->printf("Failed to fetch remote list.\n");
     return;
   }
 
   d->printf("Scanning local files...\n");
-  appjson *local_list = get_local_file_list(d, local_path, cache_dir);
+  appjson *local_list = get_local_file_list(d, local_path, cache_dir, sub_path);
 
   int count = d->json_get_array_size(local_list);
   d->printf("Found %d local files. Synchronizing...\n", count);
+
+  char *target_dir = d->strdup(local_path);
+  if (sub_path && d->strlen(sub_path) > 0) {
+    char *tmp = d->concat_path(local_path, sub_path);
+    d->free(target_dir);
+    target_dir = tmp;
+  }
 
   int uploaded = 0;
   int skipped = 0;
@@ -1361,7 +1381,7 @@ void perform_upload_sync(appdeps *d, const char *local_path,
       d->custom_strcat(u_url, "api/write_database_file");
 
       // Read local file
-      char *full_path = d->concat_path(local_path, f);
+      char *full_path = d->concat_path(target_dir, f);
       long fsize = 0;
       appbool is_bin = app_false;
       const unsigned char *content = d->read_any(full_path, &fsize, &is_bin);
@@ -1370,7 +1390,16 @@ void perform_upload_sync(appdeps *d, const char *local_path,
         appclientrequest *req = d->newappclientrequest(u_url);
         d->appclientrequest_set_method(req, "POST");
         d->appclientrequest_set_header(req, "root-password", pass);
-        d->appclientrequest_set_header(req, "path", f);
+
+        // Calculate effective remote path
+        if (sub_path && d->strlen(sub_path) > 0) {
+          char *eff_path = d->concat_path(sub_path, f);
+          d->appclientrequest_set_header(req, "path", eff_path);
+          d->free(eff_path);
+        } else {
+          d->appclientrequest_set_header(req, "path", f);
+        }
+
         d->appclientrequest_set_body(req, (unsigned char *)content, fsize);
 
         appclientresponse *resp = d->appclientrequest_fetch(req);
@@ -1430,7 +1459,15 @@ void perform_upload_sync(appdeps *d, const char *local_path,
       appclientrequest *req = d->newappclientrequest(del_url);
       d->appclientrequest_set_method(req, "POST");
       d->appclientrequest_set_header(req, "root-password", pass);
-      d->appclientrequest_set_header(req, "path", f);
+
+      // Calculate effective remote path
+      if (sub_path && d->strlen(sub_path) > 0) {
+        char *eff_path = d->concat_path(sub_path, f);
+        d->appclientrequest_set_header(req, "path", eff_path);
+        d->free(eff_path);
+      } else {
+        d->appclientrequest_set_header(req, "path", f);
+      }
 
       appclientresponse *resp = d->appclientrequest_fetch(req);
       if (resp) {
@@ -1454,6 +1491,7 @@ void perform_upload_sync(appdeps *d, const char *local_path,
             uploaded, skipped, deleted);
   d->json_delete(remote_list);
   d->json_delete(local_list);
+  d->free(target_dir);
 }
 
 // ===============================MAIN==========================================
@@ -1539,12 +1577,7 @@ int appmain(appdeps *d) {
   if (d->strcmp(command, "upload") == 0) {
     const char *db_path = d->get_arg_flag_value(
         d->argv, DB_FLAGS, sizeof(DB_FLAGS) / sizeof(DB_FLAGS[0]), 0);
-    // Fallback to path flag if database_path is not set, for backward compat or
-    // user convenience
-    if (!db_path) {
-      db_path = d->get_arg_flag_value(
-          d->argv, PATH_FLAGS, sizeof(PATH_FLAGS) / sizeof(PATH_FLAGS[0]), 0);
-    }
+    // Removed fallback to PATH_FLAGS
 
     const char *url_base = d->get_arg_flag_value(
         d->argv, URL_FLAGS, sizeof(URL_FLAGS) / sizeof(URL_FLAGS[0]), 0);
@@ -1553,7 +1586,7 @@ int appmain(appdeps *d) {
 
     if (!db_path || !url_base || !pass) {
       d->printf("Usage: vibelog upload --database-path <dir> --url <url> "
-                "--root-password <pass>\n");
+                "--root-password <pass> [--path <subdir>]\n");
       return 1;
     }
 
@@ -1570,7 +1603,23 @@ int appmain(appdeps *d) {
       global_config.cache_dir = d->strdup(".vibelog_cache");
     }
 
-    perform_upload_sync(d, db_path, url_base, pass, global_config.cache_dir);
+    // Parse sub path
+    const char *sub_path_val = d->get_arg_flag_value(
+        d->argv, PATH_FLAGS, sizeof(PATH_FLAGS) / sizeof(PATH_FLAGS[0]), 0);
+    const char *sub_path = app_null;
+    if (sub_path_val) {
+      if (d->strcmp(sub_path_val, "/") == 0) {
+        sub_path = app_null;
+      } else if (sub_path_val[0] == '/') {
+        // Safe since d->argv strings are persistent
+        sub_path = sub_path_val + 1;
+      } else {
+        sub_path = sub_path_val;
+      }
+    }
+
+    perform_upload_sync(d, db_path, url_base, pass, global_config.cache_dir,
+                        sub_path);
     d->free((void *)global_config.cache_dir); // Cleanup
     return 0;
   }
@@ -1579,11 +1628,7 @@ int appmain(appdeps *d) {
   if (d->strcmp(command, "download") == 0) {
     const char *db_path = d->get_arg_flag_value(
         d->argv, DB_FLAGS, sizeof(DB_FLAGS) / sizeof(DB_FLAGS[0]), 0);
-    // Fallback
-    if (!db_path) {
-      db_path = d->get_arg_flag_value(
-          d->argv, PATH_FLAGS, sizeof(PATH_FLAGS) / sizeof(PATH_FLAGS[0]), 0);
-    }
+    // Removed fallback
 
     const char *url_base = d->get_arg_flag_value(
         d->argv, URL_FLAGS, sizeof(URL_FLAGS) / sizeof(URL_FLAGS[0]), 0);
@@ -1609,7 +1654,22 @@ int appmain(appdeps *d) {
       global_config.cache_dir = d->strdup(".vibelog_cache");
     }
 
-    perform_download_sync(d, db_path, url_base, pass, global_config.cache_dir);
+    // Parse sub path
+    const char *sub_path_val = d->get_arg_flag_value(
+        d->argv, PATH_FLAGS, sizeof(PATH_FLAGS) / sizeof(PATH_FLAGS[0]), 0);
+    const char *sub_path = app_null;
+    if (sub_path_val) {
+      if (d->strcmp(sub_path_val, "/") == 0) {
+        sub_path = app_null;
+      } else if (sub_path_val[0] == '/') {
+        sub_path = sub_path_val + 1;
+      } else {
+        sub_path = sub_path_val;
+      }
+    }
+
+    perform_download_sync(d, db_path, url_base, pass, global_config.cache_dir,
+                          sub_path);
     d->free((void *)global_config.cache_dir); // Cleanup
     return 0;
   }
