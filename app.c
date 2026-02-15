@@ -1860,8 +1860,16 @@ char *render_page(appdeps *d, const char *title, const char *content) {
 
 long parse_date_to_ts(appdeps *d, const char *date) {
   // DD-MM-YYYY -> YYYYMMDD
-  if (d->strlen(date) != 10)
+  // Handle dates with trailing slashes like "04-02-2026/"
+  int len = d->strlen(date);
+  
+  if (len < 10)
     return 0;
+  
+  // Check if it's a valid date format (either "DD-MM-YYYY" or "DD-MM-YYYY/")
+  if (len != 10 && len != 11)
+    return 0;
+  
   // Simple manual parsing
   char year[5] = {0};
   char month[3] = {0};
@@ -1985,7 +1993,7 @@ appjson *load_articles(appdeps *d, int page, int limit, const char *category,
   }
   d->delete_stringarray(dates);
 
-  // SORTING (Bubble Sort on appjson array by 'ts' desc)
+  // SORTING (Bubble Sort on appjson array by 'ts' desc - newest first)
   int total = d->json_get_array_size(all_articles);
   for (int i = 0; i < total - 1; i++) {
     for (int j = 0; j < total - i - 1; j++) {
@@ -1994,11 +2002,15 @@ appjson *load_articles(appdeps *d, int page, int limit, const char *category,
       double tsa = d->json_get_number_value(d->json_get_object_item(a, "ts"));
       double tsb = d->json_get_number_value(d->json_get_object_item(b, "ts"));
 
-      if (tsa < tsb) { // Descending
-        appjson *a_clone = d->json_duplicate(a, app_true);
-        appjson *b_clone = d->json_duplicate(b, app_true);
-        d->json_replace_item_in_array(all_articles, j, b_clone);
-        d->json_replace_item_in_array(all_articles, j + 1, a_clone);
+      // For descending order (newest first): swap if a's timestamp is smaller than b's
+      if (tsa < tsb) {
+        // Create temporary references to avoid memory issues
+        appjson *temp_a = d->json_duplicate(a, app_true);
+        appjson *temp_b = d->json_duplicate(b, app_true);
+        
+        // Replace items in array
+        d->json_replace_item_in_array(all_articles, j, temp_b);
+        d->json_replace_item_in_array(all_articles, j + 1, temp_a);
       }
     }
   }
