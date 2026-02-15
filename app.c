@@ -1702,7 +1702,8 @@ const char *get_mime_type(appdeps *d, const char *path) {
 
 void load_global_data(appdeps *d) {
   if (cached_categories == app_null) {
-    char *path = d->concat_path(global_config.database_path, "categorys.json");
+    char *path =
+        d->concat_path(global_config.database_path, "config/categorys.json");
     if (d->file_exists(path)) {
       cached_categories = d->json_parse_file(path);
     } else {
@@ -1743,7 +1744,7 @@ char *render_page(appdeps *d, const char *title, const char *content) {
 
   // CSS
   d->ctext_append(
-      t, "<link rel='stylesheet' href='/database_file?path=style.css'>");
+      t, "<link rel='stylesheet' href='/database_file?path=config/style.css'>");
   d->ctext_append(t, "</head><body>");
 
   // NAVBAR
