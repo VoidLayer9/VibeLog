@@ -968,6 +968,309 @@ const appserverresponse *router(appdeps *d, void *props) {
   return d->send_text("Not Found", "text/plain", 404);
 }
 
+// ===============================SYNC LOGIC====================================
+
+// Fetch remote file list recursively
+appjson *fetch_remote_file_list(appdeps *d, const char *url_base,
+                                const char *pass) {
+  // Construct URL: url_base + /api/list_database_files_recursively
+  // url_base might fail if it doesn't end with / or if it has query params
+  // simple concat for now
+  char *full_url =
+      d->concat_path(url_base, "api/list_database_files_recursively");
+  // concat_path might use system separator, ensure / for URL
+  // But wait, concat_path is system dependent.
+  // Better use manual concat.
+  d->free(full_url);
+
+  int len = d->strlen(url_base) +
+            d->strlen("api/list_database_files_recursively") + 2;
+  full_url = d->malloc(len);
+  d->custom_memset(full_url, 0, len);
+  d->custom_strcpy(full_url, url_base);
+  if (d->strlen(full_url) > 0 && full_url[d->strlen(full_url) - 1] != '/') {
+    d->custom_strcat(full_url, "/");
+  }
+  d->custom_strcat(full_url, "api/list_database_files_recursively");
+
+  appclientrequest *req = d->newappclientrequest(full_url);
+  d->appclientrequest_set_method(req, "POST"); // API says POST
+  d->appclientrequest_set_header(req, "root_password", pass);
+  // No path header needed for full recursive list from root
+
+  appclientresponse *resp = d->appclientrequest_fetch(req);
+  appjson *result = app_null;
+
+  if (resp) {
+    long rsize = 0;
+    const unsigned char *rbody = d->appclientresponse_read_body(resp, &rsize);
+    if (rbody) {
+      char *rstr = d->malloc(rsize + 1);
+      d->custom_memcpy(rstr, rbody, rsize);
+      rstr[rsize] = 0;
+      result = d->json_parse(rstr);
+      d->free(rstr);
+    }
+    d->free_clientresponse(resp);
+  }
+
+  d->appclientrequest_free(req);
+  d->free(full_url);
+  return result;
+}
+
+// Get local file list with SHAs
+appjson *get_local_file_list(appdeps *d, const char *base_path) {
+  appstringarray *files = d->list_files_recursively(base_path);
+  appjson *arr = d->json_create_array();
+
+  if (!files)
+    return arr;
+
+  long count = d->get_stringarray_size(files);
+  for (int i = 0; i < count; i++) {
+    const char *f = d->get_stringarray_item(files, i);
+    appjson *obj = d->json_create_object();
+    d->json_add_string_to_object(obj, "file", f);
+
+    // Calc SHA using cache
+    char *full_path = d->concat_path(base_path, f);
+    // Use .vibelog_cache in the same directory as the executable?
+    // Or in the base_path's parent?
+    // Let's use a fixed cache dir relative to base_path for now:
+    // base_path/.vibelog_cache Actually the tool
+    // d->get_cached_file_sha(cache_dir, filepath)
+    char *cache_dir = d->concat_path(base_path, ".vibelog_cache");
+
+    // We shouldn't list files inside .vibelog_cache though.
+    // list_files_recursively might include them if not careful.
+    // The problem is subsequent runs.
+    // We should filter out .vibelog_cache if list_files_recursively returns it.
+
+    if (d->strstr(f, ".vibelog_cache")) {
+      d->free(full_path);
+      d->free(cache_dir);
+      d->json_delete(obj);
+      continue;
+    }
+
+    if (!d->dir_exists(cache_dir)) {
+      d->create_dir(cache_dir);
+    }
+
+    char *sha = d->get_cached_file_sha(cache_dir, full_path);
+    if (sha) {
+      d->json_add_string_to_object(obj, "sha", sha);
+      d->json_free_string(sha);
+    }
+
+    d->json_add_item_to_array(arr, obj);
+
+    d->free(cache_dir);
+    d->free(full_path);
+  }
+  d->delete_stringarray(files);
+  return arr;
+}
+
+// Find file object in json array by path
+appjson *find_file_obj(appdeps *d, appjson *arr, const char *filepath) {
+  if (!arr || !d->json_is_array(arr))
+    return app_null;
+  int count = d->json_get_array_size(arr);
+  for (int i = 0; i < count; i++) {
+    appjson *item = d->json_get_array_item(arr, i);
+    const char *f =
+        d->json_get_string_value(d->json_get_object_item(item, "file"));
+    if (f && d->strcmp(f, filepath) == 0) {
+      return item;
+    }
+  }
+  return app_null;
+}
+
+// DOWNLOAD SYNC
+void perform_download_sync(appdeps *d, const char *local_path,
+                           const char *url_base, const char *pass) {
+  d->printf("Fetching remote file list...\n");
+  appjson *remote_list = fetch_remote_file_list(d, url_base, pass);
+  if (!remote_list) {
+    d->printf("Failed to fetch remote list.\n");
+    return;
+  }
+
+  d->printf("Scanning local files...\n");
+  appjson *local_list = get_local_file_list(d, local_path);
+
+  int count = d->json_get_array_size(remote_list);
+  d->printf("Found %d remote files. Synchronizing...\n", count);
+
+  int downloaded = 0;
+  int skipped = 0;
+
+  for (int i = 0; i < count; i++) {
+    appjson *r_item = d->json_get_array_item(remote_list, i);
+    const char *f =
+        d->json_get_string_value(d->json_get_object_item(r_item, "file"));
+    const char *r_sha =
+        d->json_get_string_value(d->json_get_object_item(r_item, "sha"));
+
+    // Check local
+    appjson *l_item = find_file_obj(d, local_list, f);
+    appbool need_download = app_true;
+
+    if (l_item) {
+      const char *l_sha =
+          d->json_get_string_value(d->json_get_object_item(l_item, "sha"));
+      if (l_sha && r_sha && d->strcmp(l_sha, r_sha) == 0) {
+        need_download = app_false;
+      }
+    }
+
+    if (need_download) {
+      d->printf("Downloading %s...\n", f);
+
+      // Prepare download URL
+      // POST /api/read_database_file with header path=f
+      int len = d->strlen(url_base) + d->strlen("api/read_database_file") + 2;
+      char *d_url = d->malloc(len);
+      d->custom_memset(d_url, 0, len);
+      d->custom_strcpy(d_url, url_base);
+      if (d->strlen(d_url) > 0 && d_url[d->strlen(d_url) - 1] != '/') {
+        d->custom_strcat(d_url, "/");
+      }
+      d->custom_strcat(d_url, "api/read_database_file");
+
+      appclientrequest *req = d->newappclientrequest(d_url);
+      d->appclientrequest_set_method(req, "POST");
+      d->appclientrequest_set_header(req, "root_password", pass);
+      d->appclientrequest_set_header(req, "path", f);
+
+      appclientresponse *resp = d->appclientrequest_fetch(req);
+      if (resp) {
+        long rsize = 0;
+        const unsigned char *rbody =
+            d->appclientresponse_read_body(resp, &rsize);
+        if (rbody) { // Check if we actually got content
+          char *save_path = d->concat_path(local_path, f);
+          d->write_any(save_path, rbody, rsize);
+          d->free(save_path);
+          downloaded++;
+        } else {
+          d->printf("Empty response for %s\n", f);
+        }
+        d->free_clientresponse(resp);
+      } else {
+        d->printf("Failed query for %s\n", f);
+      }
+      d->appclientrequest_free(req);
+      d->free(d_url);
+
+    } else {
+      skipped++;
+    }
+  }
+
+  d->printf("Sync Complete. Downloaded: %d, Skipped: %d\n", downloaded,
+            skipped);
+  d->json_delete(remote_list);
+  d->json_delete(local_list);
+}
+
+// UPLOAD SYNC
+void perform_upload_sync(appdeps *d, const char *local_path,
+                         const char *url_base, const char *pass) {
+  d->printf("Fetching remote file list...\n");
+  appjson *remote_list = fetch_remote_file_list(d, url_base, pass);
+  if (!remote_list) {
+    d->printf("Failed to fetch remote list.\n");
+    return;
+  }
+
+  d->printf("Scanning local files...\n");
+  appjson *local_list = get_local_file_list(d, local_path);
+
+  int count = d->json_get_array_size(local_list);
+  d->printf("Found %d local files. Synchronizing...\n", count);
+
+  int uploaded = 0;
+  int skipped = 0;
+
+  for (int i = 0; i < count; i++) {
+    appjson *l_item = d->json_get_array_item(local_list, i);
+    const char *f =
+        d->json_get_string_value(d->json_get_object_item(l_item, "file"));
+    const char *l_sha =
+        d->json_get_string_value(d->json_get_object_item(l_item, "sha"));
+
+    // Skip hidden files or cache
+    if (d->strstr(f, ".vibelog_cache") || d->strstr(f, ".DS_Store")) {
+      continue;
+    }
+
+    // Check remote
+    appjson *r_item = find_file_obj(d, remote_list, f);
+    appbool need_upload = app_true;
+
+    if (r_item) {
+      const char *r_sha =
+          d->json_get_string_value(d->json_get_object_item(r_item, "sha"));
+      if (l_sha && r_sha && d->strcmp(l_sha, r_sha) == 0) {
+        need_upload = app_false;
+      }
+    }
+
+    if (need_upload) {
+      d->printf("Uploading %s...\n", f);
+
+      // Prepare upload URL
+      // POST /api/write_database_file
+      int len = d->strlen(url_base) + d->strlen("api/write_database_file") + 2;
+      char *u_url = d->malloc(len);
+      d->custom_memset(u_url, 0, len);
+      d->custom_strcpy(u_url, url_base);
+      if (d->strlen(u_url) > 0 && u_url[d->strlen(u_url) - 1] != '/') {
+        d->custom_strcat(u_url, "/");
+      }
+      d->custom_strcat(u_url, "api/write_database_file");
+
+      // Read local file
+      char *full_path = d->concat_path(local_path, f);
+      long fsize = 0;
+      appbool is_bin = app_false;
+      const unsigned char *content = d->read_any(full_path, &fsize, &is_bin);
+
+      if (content) {
+        appclientrequest *req = d->newappclientrequest(u_url);
+        d->appclientrequest_set_method(req, "POST");
+        d->appclientrequest_set_header(req, "root_password", pass);
+        d->appclientrequest_set_header(req, "path", f);
+        d->appclientrequest_set_body(req, (unsigned char *)content, fsize);
+
+        appclientresponse *resp = d->appclientrequest_fetch(req);
+        if (resp) {
+          // assume success if response
+          d->free_clientresponse(resp);
+          uploaded++;
+        } else {
+          d->printf("Failed upload for %s\n", f);
+        }
+        d->appclientrequest_free(req);
+        d->free((void *)content); // cast to void* for free
+      }
+      d->free(full_path);
+      d->free(u_url);
+
+    } else {
+      skipped++;
+    }
+  }
+
+  d->printf("Sync Complete. Uploaded: %d, Skipped: %d\n", uploaded, skipped);
+  d->json_delete(remote_list);
+  d->json_delete(local_list);
+}
+
 // ===============================MAIN==========================================
 // ===============================MAIN==========================================
 int appmain(appdeps *d) {
@@ -1048,177 +1351,62 @@ int appmain(appdeps *d) {
 
   // COMMAND: UPLOAD
   if (d->strcmp(command, "upload") == 0) {
-    const char *path = d->get_arg_flag_value(
-        d->argv, PATH_FLAGS, sizeof(PATH_FLAGS) / sizeof(PATH_FLAGS[0]), 0);
+    const char *db_path = d->get_arg_flag_value(
+        d->argv, DB_FLAGS, sizeof(DB_FLAGS) / sizeof(DB_FLAGS[0]), 0);
+    // Fallback to path flag if database_path is not set, for backward compat or
+    // user convenience
+    if (!db_path) {
+      db_path = d->get_arg_flag_value(
+          d->argv, PATH_FLAGS, sizeof(PATH_FLAGS) / sizeof(PATH_FLAGS[0]), 0);
+    }
+
     const char *url_base = d->get_arg_flag_value(
         d->argv, URL_FLAGS, sizeof(URL_FLAGS) / sizeof(URL_FLAGS[0]), 0);
     const char *pass = d->get_arg_flag_value(
         d->argv, PASS_FLAGS, sizeof(PASS_FLAGS) / sizeof(PASS_FLAGS[0]), 0);
 
-    if (!path || !url_base || !pass) {
-      d->printf("Usage: vibelog upload --path <file> --url <url> "
+    if (!db_path || !url_base || !pass) {
+      d->printf("Usage: vibelog upload --database_path <dir> --url <url> "
                 "--root_password <pass>\n");
       return 1;
     }
 
-    if (!d->file_exists(path)) {
-      d->printf("Error: File not found: %s\n", path);
+    if (!d->dir_exists(db_path)) {
+      d->printf("Error: Directory not found: %s\n", db_path);
       return 1;
     }
 
-    // Construct URL
-    char *full_url = d->concat_path(url_base, "api/write_database_file");
-
-    // Fix double slash if present (concat_path might add one if url_base ends
-    // with /) Actually concat_path is usually for file paths, let's just use
-    // string manip if needed, but concat_path is safe enough for simple
-    // concatenation usually. Better: check if url_base ends in / Simple manual
-    // concat to be safe for URLs:
-    if (d->strlen(url_base) > 0 && url_base[d->strlen(url_base) - 1] == '/') {
-      // remove trailing slash or just don't add one.
-      // Let's rely on user provided valid URL or simple concatenation.
-      // Re-doing manually to be safe:
-      // d->free(full_url);
-      // full_url = d->malloc(d->strlen(url_base) + 30);
-      // d->sprintf(full_url, "%sapi/write_database_file", url_base);
-    }
-    // Actually d->concat_path adds a separator, which might be / or \.
-    // For URLs we want /. If OS is Windows, concat_path might use \.
-    // Let's blindly use concat_path and replace \ with / if needed, or just
-    // standard string ops. Since we don't have direct string manip utils
-    // exposed easily besides generic ones:
-    d->free(full_url);
-
-    // Manual URL construction
-    int len = d->strlen(url_base) + d->strlen("api/write_database_file") + 2;
-    full_url = d->malloc(len);
-    d->custom_memset(full_url, 0, len);
-    d->custom_strcpy(full_url, url_base);
-    if (full_url[d->strlen(full_url) - 1] != '/') {
-      d->custom_strcat(full_url, "/");
-    }
-    d->custom_strcat(full_url, "api/write_database_file");
-
-    d->printf("Uploading %s to %s...\n", path, full_url);
-
-    // Read File
-    long fsize = 0;
-    appbool is_bin = app_false;
-    unsigned char *content = d->read_any(path, &fsize, &is_bin);
-
-    if (!content) {
-      d->printf("Failed to read file\n");
-      d->free(full_url);
-      return 1;
-    }
-
-    appclientrequest *req = d->newappclientrequest(full_url);
-    d->appclientrequest_set_method(req, "POST");
-    d->appclientrequest_set_header(req, "root_password", pass);
-
-    // Path header should be relative path in DB.
-    // PROMPT says: "Uploads a local file ... --path /path/to/file".
-    // It doesn't specify the DESTINATION path.
-    // However, the `write_database_file` API needs `path` header.
-    // We will assume the local path structure mirrors the db structure OR
-    // we just send the filename?
-    // Standard practice: if I upload `database/categorys.json`, I want it to be
-    // `categorys.json`. If I upload `my_files/image.png`, do I want
-    // `image.png`? Let's send the provided path argument as the path header,
-    // but user should probably provide relative path. CLI usage example:
-    // `vibelog upload --path database/categorys.json ...` We will send the
-    // `path` arg as the header.
-    d->appclientrequest_set_header(req, "path", path);
-
-    d->appclientrequest_set_body(req, content, fsize);
-
-    appclientresponse *resp = d->appclientrequest_fetch(req);
-
-    if (resp) {
-      long rsize = 0;
-      const unsigned char *rbody = d->appclientresponse_read_body(resp, &rsize);
-      if (rbody) {
-        char *rstr = d->malloc(rsize + 1);
-        d->custom_memcpy(rstr, rbody, rsize);
-        rstr[rsize] = 0;
-        d->printf("Response: %s\n", rstr);
-        d->free(rstr);
-      }
-      d->free_clientresponse(resp);
-    } else {
-      d->printf("Request failed\n");
-    }
-
-    d->appclientrequest_free(req);
-    d->free(content); // read_any allocates (it says read_string needs free,
-                      // read_any implies it returns a buffer)
-    // Actually read_any docs: "unsigned char *(*read_any)(const char *path,
-    // long *size, appbool *is_binary);" Usually implies allocation.
-    d->free(full_url);
+    perform_upload_sync(d, db_path, url_base, pass);
     return 0;
   }
 
   // COMMAND: DOWNLOAD
   if (d->strcmp(command, "download") == 0) {
-    const char *path = d->get_arg_flag_value(
-        d->argv, PATH_FLAGS, sizeof(PATH_FLAGS) / sizeof(PATH_FLAGS[0]), 0);
+    const char *db_path = d->get_arg_flag_value(
+        d->argv, DB_FLAGS, sizeof(DB_FLAGS) / sizeof(DB_FLAGS[0]), 0);
+    // Fallback
+    if (!db_path) {
+      db_path = d->get_arg_flag_value(
+          d->argv, PATH_FLAGS, sizeof(PATH_FLAGS) / sizeof(PATH_FLAGS[0]), 0);
+    }
+
     const char *url_base = d->get_arg_flag_value(
         d->argv, URL_FLAGS, sizeof(URL_FLAGS) / sizeof(URL_FLAGS[0]), 0);
     const char *pass = d->get_arg_flag_value(
         d->argv, PASS_FLAGS, sizeof(PASS_FLAGS) / sizeof(PASS_FLAGS[0]), 0);
 
-    if (!path || !url_base || !pass) {
-      d->printf("Usage: vibelog download --path <file> --url <url> "
+    if (!db_path || !url_base || !pass) {
+      d->printf("Usage: vibelog download --database_path <dir> --url <url> "
                 "--root_password <pass>\n");
       return 1;
     }
 
-    // URL
-    int len = d->strlen(url_base) + d->strlen("api/read_database_file") + 2;
-    char *full_url = d->malloc(len);
-    d->custom_memset(full_url, 0, len);
-    d->custom_strcpy(full_url, url_base);
-    if (full_url[d->strlen(full_url) - 1] != '/') {
-      d->custom_strcat(full_url, "/");
-    }
-    d->custom_strcat(full_url, "api/read_database_file");
-
-    d->printf("Downloading %s from %s...\n", path, full_url);
-
-    appclientrequest *req = d->newappclientrequest(full_url);
-    d->appclientrequest_set_method(
-        req,
-        "POST"); // API says POST for read? Yes. "POST /api/read_database_file"
-    d->appclientrequest_set_header(req, "root_password", pass);
-    d->appclientrequest_set_header(req, "path", path);
-
-    appclientresponse *resp = d->appclientrequest_fetch(req);
-
-    if (resp) {
-      // Check status code?
-      // The sandbox doesn't expose status code directly easily in the struct
-      // definition provided above "const char
-      // *(*appclientresponse_get_header_value_by_key)(...)" Usually we assume
-      // success if body is present, or parse headers. But let's just write what
-      // we get.
-      long rsize = 0;
-      const unsigned char *rbody = d->appclientresponse_read_body(resp, &rsize);
-      if (rbody) {
-        // Check if it looks like an error (simple heuristic, not robust but
-        // okay for CLI tool) If small and text, might be error. But we
-        // requested a file.
-        d->write_any(path, rbody, rsize);
-        d->printf("Downloaded %ld bytes to %s\n", rsize, path);
-      } else {
-        d->printf("Empty response or failure\n");
-      }
-      d->free_clientresponse(resp);
-    } else {
-      d->printf("Request failed\n");
+    // Create dir if not exists?
+    if (!d->dir_exists(db_path)) {
+      d->create_dir(db_path);
     }
 
-    d->appclientrequest_free(req);
-    d->free(full_url);
+    perform_download_sync(d, db_path, url_base, pass);
     return 0;
   }
 
