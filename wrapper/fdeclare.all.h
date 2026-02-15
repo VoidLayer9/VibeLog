@@ -243,4 +243,63 @@ int wrapper_strncmp(const char *s1, const char *s2, unsigned long n);
 int wrapper_memcmp(const void *s1, const void *s2, unsigned long n);//fdefine.text_stack.c
 
 
-void * wrapper_new_text_stack(const char *text_or_null);
+void *wrapper_new_text_stack(const char *text) ;
+
+void wrapper_text_stack_append(void *text_stack, const char *text) ;
+
+const char *wrapper_text_stack_text(void *text_stack) ;
+
+void wrapper_text_stack_free(void *text_stack) ;
+
+void wrapper_text_stack_restart(void *text_stack) ;
+
+void *wrapper_text_stack_clone(void *text_stack) ;
+
+void wrapper_text_stack_self_substr(void *text_stack, long starter, long end) ;
+
+void wrapper_text_stack_self_pop(void *text_stack, long starter, long end) ;
+
+void wrapper_text_stack_self_insert_at(void *text_stack, long point,
+                                       const char *element) ;
+
+void wrapper_text_stack_self_replace(void *text_stack, const char *element,
+                                     const char *element_to_replace) ;
+
+void wrapper_text_stack_self_replace_long(void *text_stack, const char *element,
+                                          long element_to_replace) ;
+
+void wrapper_text_stack_self_replace_double(void *text_stack,
+                                            const char *element,
+                                            double element_to_replace) ;
+
+void wrapper_text_stack_self_lower(void *text_stack) ;
+
+void wrapper_text_stack_self_upper(void *text_stack) ;
+
+void wrapper_text_stack_self_captalize(void *text_stack) ;
+
+void wrapper_text_stack_self_reverse(void *text_stack) ;
+
+void wrapper_text_stack_self_trim(void *text_stack) ;
+
+int wrapper_text_stack_starts_with(void *text_stack, const char *element) ;
+
+int wrapper_text_stack_ends_with(void *text_stack, const char *element) ;
+
+int wrapper_text_stack_equal(void *text_stack, const char *element) ;
+
+int wrapper_text_stack_typeof_element(void *text_stack) ;
+
+int wrapper_text_stack_is_a_num(void *text_stack) ;
+
+const char *wrapper_text_stack_typeof_in_str(void *text_stack) ;
+
+int wrapper_text_stack_parse_to_bool(void *text_stack) ;
+
+long wrapper_text_stack_parse_to_integer(void *text_stack) ;
+
+double wrapper_text_stack_parse_to_double(void *text_stack) ;
+
+long wrapper_text_stack_index_of(void *text_stack, const char *element) ;
+
+long wrapper_text_stack_index_of_char(void *text_stack, char element) ;

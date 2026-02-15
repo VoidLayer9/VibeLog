@@ -2,12 +2,18 @@
 //mannaged by silver chain: https://github.com/OUIsolutions/SilverChain
 #include "imports/imports.fdeclare.h"
 //silver_chain_scope_end
-
+// silver_chain_scope_start
+// mannaged by silver chain: https://github.com/OUIsolutions/SilverChain
+#include "imports/imports.fdeclare.h"
+// silver_chain_scope_end
+//  silver_chain_scope_start
+//  mannaged by silver chain: https://github.com/OUIsolutions/SilverChain
+#include "imports/imports.fdeclare.h"
+// silver_chain_scope_end
 
 const appserverresponse *(*global_app_handler)(appdeps *d, void *props) = NULL;
 void *global_app_props = NULL;
 appbool global_firmware_mode = 0;
-
 
 // ===============================GLOBALS======================================
 CArgvParse global_argv = {0};
@@ -32,7 +38,7 @@ appdeps global_appdeps = {
     .malloc = wrapper_malloc,
     .calloc = wrapper_calloc,
     .realloc = wrapper_realloc,
-    
+
     // HTTP request wrapper functions
     .get_server_route = wrapper_get_server_route,
     .get_server_header = wrapper_get_server_header,
@@ -51,7 +57,8 @@ appdeps global_appdeps = {
     .newappserverresponse = wrapper_newappserverresponse,
     .setappserverresponse_header = wrapper_setappserverresponse_header,
     .setappserverresponse_content = wrapper_setappserverresponse_content,
-    .setappserverresponse_status_code = wrapper_setappserverresponse_status_code,
+    .setappserverresponse_status_code =
+        wrapper_setappserverresponse_status_code,
     .send_any = wrapper_send_any,
     .send_text = wrapper_send_text,
     .send_file = wrapper_send_file,
@@ -159,16 +166,22 @@ appdeps global_appdeps = {
     .newappclientrequest = wrapper_newhttpclient,
     .appclientrequest_set_header = wrapper_httpclient_set_header,
     .appclientrequest_set_method = wrapper_httpclient_set_method,
-    .appclientrequest_set_max_redirections = wrapper_httpclient_set_max_redirections,
+    .appclientrequest_set_max_redirections =
+        wrapper_httpclient_set_max_redirections,
     .appclientrequest_set_body = wrapper_httpclient_set_body,
     .appclientrequest_free = wrapper_httpclient_free,
     .appclientrequest_fetch = wrapper_httpclient_fetch,
     .appclientresponse_read_body = wrapper_httpclient_response_read_body,
-    .appclientresponse_get_body_size = wrapper_httpclient_response_get_body_size,
-    .appclientresponse_get_header_value_by_key = wrapper_httpclient_response_get_header_value_by_key,
-    .appclientresponse_get_header_key_by_index = wrapper_httpclient_response_get_header_key_by_index,
-    .appclientresponse_get_header_value_by_index = wrapper_httpclient_response_get_header_value_by_index,
-    .appclientresponse_get_header_size = wrapper_httpclient_response_get_header_size,
+    .appclientresponse_get_body_size =
+        wrapper_httpclient_response_get_body_size,
+    .appclientresponse_get_header_value_by_key =
+        wrapper_httpclient_response_get_header_value_by_key,
+    .appclientresponse_get_header_key_by_index =
+        wrapper_httpclient_response_get_header_key_by_index,
+    .appclientresponse_get_header_value_by_index =
+        wrapper_httpclient_response_get_header_value_by_index,
+    .appclientresponse_get_header_size =
+        wrapper_httpclient_response_get_header_size,
     .free_clientresponse = wrapper_httpclient_response_free,
     .get_asset_content = wrapper_get_asset_content,
     .list_assets = wrapper_list_assets,
@@ -181,10 +194,41 @@ appdeps global_appdeps = {
 
     // sha functions
     .get_sha256 = wrapper_generate_sha,
-    .get_cached_file_sha = wrapper_generate_cached_sha_from_file
+    .get_cached_file_sha = wrapper_generate_cached_sha_from_file,
+
+    // Text Stack functions
+    .new_ctext = wrapper_new_text_stack,
+    .ctext_append = wrapper_text_stack_append,
+    .ctext_get_text = wrapper_text_stack_text,
+    .ctext_free = wrapper_text_stack_free,
+    .ctext_restart = wrapper_text_stack_restart,
+    .ctext_clone = wrapper_text_stack_clone,
+    .ctext_self_substr = wrapper_text_stack_self_substr,
+    .ctext_self_pop = wrapper_text_stack_self_pop,
+    .ctext_self_insert_at = wrapper_text_stack_self_insert_at,
+    .ctext_self_replace = wrapper_text_stack_self_replace,
+    .ctext_self_replace_long = wrapper_text_stack_self_replace_long,
+    .ctext_self_replace_double = wrapper_text_stack_self_replace_double,
+    .ctext_self_lower = wrapper_text_stack_self_lower,
+    .ctext_self_upper = wrapper_text_stack_self_upper,
+    .ctext_self_captalize = wrapper_text_stack_self_captalize,
+    .ctext_self_reverse = wrapper_text_stack_self_reverse,
+    .ctext_self_trim = wrapper_text_stack_self_trim,
+    .ctext_starts_with = wrapper_text_stack_starts_with,
+    .ctext_ends_with = wrapper_text_stack_ends_with,
+    .ctext_equal = wrapper_text_stack_equal,
+    .ctext_typeof_element = wrapper_text_stack_typeof_element,
+    .ctext_is_a_num = wrapper_text_stack_is_a_num,
+    .ctext_typeof_in_str = wrapper_text_stack_typeof_in_str,
+    .ctext_parse_to_bool = wrapper_text_stack_parse_to_bool,
+    .ctext_parse_to_integer = wrapper_text_stack_parse_to_integer,
+    .ctext_parse_to_double = wrapper_text_stack_parse_to_double,
+    .ctext_index_of = wrapper_text_stack_index_of,
+    .ctext_index_of_char = wrapper_text_stack_index_of_char
+
 };
 CwebHttpResponse *main_internal_server(CwebHttpRequest *request) {
-    global_appdeps.appserverrequest = (const void*)request;
-    const void *response = global_app_handler(&global_appdeps, global_app_props);
-    return (CwebHttpResponse *)response;
+  global_appdeps.appserverrequest = (const void *)request;
+  const void *response = global_app_handler(&global_appdeps, global_app_props);
+  return (CwebHttpResponse *)response;
 }
