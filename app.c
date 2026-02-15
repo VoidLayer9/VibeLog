@@ -205,8 +205,9 @@ struct appdeps {
   char *(*get_cached_file_sha)(const char *cache_dir, const char *path);
 
   // all the listage functions return only the itens, they dont concatenate the
-  // path example depos->list_files("teste") -> {"a","b","c"} not
-  // {"teste/a","teste/b","teste/c"}
+  // path example depos->list_files("teste") -> array
+  // appstringarray->get_stringarray_item(array, 0) -> "a" (not "teste/a")
+
   appstringarray *(*list_files)(const char *path);
   appstringarray *(*list_dirs)(const char *path);
   appstringarray *(*list_any)(const char *path);
