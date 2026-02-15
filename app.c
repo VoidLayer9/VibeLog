@@ -349,7 +349,8 @@ appjson *load_articles(appdeps *d, int page, int limit, const char *category,
                        const char *search, const char *author_id);
 appjson *load_author(appdeps *d, const char *author_id);
 void record_view(appdeps *d, const char *date, const char *id);
-void record_page_view(appdeps *d, const char *page_id);
+void record_page_view(appdeps *d, const char *page_id, int chunk, int size,
+                      const char *category, const char *search);
 
 // ===============================HANDLERS======================================
 const appserverresponse *handle_article(appdeps *d,
@@ -768,7 +769,7 @@ render_article_list_response(appdeps *d, const char *title, int page, int limit,
 
 const appserverresponse *handle_home(appdeps *d, const appserverrequest *req) {
   load_global_data(d);
-  record_page_view(d, "home");
+  record_page_view(d, "home", 1, 10, app_null, app_null);
   // Home behaves like list_articles with default params (page=1, limit=10)
   return render_article_list_response(d, "Latest Articles", 1, 10, app_null,
                                       app_null);
@@ -777,7 +778,6 @@ const appserverresponse *handle_home(appdeps *d, const appserverrequest *req) {
 const appserverresponse *handle_list_articles(appdeps *d,
                                               const appserverrequest *req) {
   load_global_data(d);
-  record_page_view(d, "listings");
 
   // Parse Params
   const char *page_str = d->get_server_query_param(req, "page");
@@ -798,6 +798,8 @@ const appserverresponse *handle_list_articles(appdeps *d,
     limit = 10;
   if (limit > 50)
     limit = 50;
+
+  record_page_view(d, "listings", page, limit, category, search);
 
   return render_article_list_response(d, "Articles", page, limit, category,
                                       search);
@@ -2092,7 +2094,8 @@ void record_view(appdeps *d, const char *date, const char *id) {
   d->free(views_dir);
   d->free(id_dir);
 }
-void record_page_view(appdeps *d, const char *page_id) {
+void record_page_view(appdeps *d, const char *page_id, int chunk, int size,
+                      const char *category, const char *search) {
   // 1. Setup paths
   char *metrics_root = d->concat_path(global_config.database_path, "metrics");
   char *pages_metrics = d->concat_path(metrics_root, "pages");
@@ -2156,6 +2159,17 @@ void record_page_view(appdeps *d, const char *page_id) {
   d->json_add_string_to_object(view, "date", iso_buf);
   d->json_add_string_to_object(view, "page", page_id);
   d->json_add_number_to_object(view, "duration", 0);
+  d->json_add_number_to_object(view, "chunk", (double)chunk);
+  d->json_add_number_to_object(view, "size", (double)size);
+  if (category)
+    d->json_add_string_to_object(view, "category", category);
+  else
+    d->json_add_null_to_object(view, "category");
+
+  if (search)
+    d->json_add_string_to_object(view, "search", search);
+  else
+    d->json_add_null_to_object(view, "search");
 
   int rnd = d->get_random();
   char fname[64];
