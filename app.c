@@ -1089,6 +1089,8 @@ void load_global_data(appdeps *d) {
   }
 }
 
+appjson *calculate_stats(appdeps *d);
+
 char *render_page(appdeps *d, const char *title, const char *content) {
   appctext *t = d->new_ctext(app_null);
 
@@ -1195,29 +1197,49 @@ char *render_page(appdeps *d, const char *title, const char *content) {
   d->ctext_append(t, "<aside class='sidebar-column'>");
 
   // Stats Block
+  appjson *stats = calculate_stats(d);
+
   d->ctext_append(t, "<div class='sidebar-section'>");
   d->ctext_append(t, "<h3 class='sidebar-title'>Network Status</h3>");
-  // TODO: Dynamic stats
+
+  // Total Views
+  double total_views =
+      d->json_get_number_value(d->json_get_object_item(stats, "total_views"));
   d->ctext_append(t, "<div class='stat-item'><span class='stat-label'>Total "
-                     "Views</span><span class='stat-value'>8,942</span></div>");
-  d->ctext_append(t, "<div class='stat-item'><span class='stat-label'>System "
-                     "Load</span><span class='stat-value'>0.04%</span></div>");
+                     "Views</span><span class='stat-value'>");
+  char tv_buf[64];
+  d->custom_sprintf(tv_buf, "%.0f", total_views);
+  d->ctext_append(t, tv_buf);
+  d->ctext_append(t, "</span></div>");
+
   d->ctext_append(t, "</div>");
 
   // Categories Stats
   d->ctext_append(t, "<div class='sidebar-section'>");
   d->ctext_append(t, "<h3 class='sidebar-title'>Traffic / Sector</h3>");
-  d->ctext_append(
-      t, "<div class='stat-item'><span class='stat-label'>Lua</span><span "
-         "class='stat-value'>42%</span></div>");
-  d->ctext_append(
-      t, "<div class='stat-item'><span class='stat-label'>C</span><span "
-         "class='stat-value'>35%</span></div>");
-  d->ctext_append(
-      t,
-      "<div class='stat-item'><span class='stat-label'>Vibecoding</span><span "
-      "class='stat-value'>23%</span></div>");
+
+  appjson *cats = d->json_get_object_item(stats, "categories");
+  if (cats && d->json_is_array(cats)) {
+    int c_count = d->json_get_array_size(cats);
+    for (int i = 0; i < c_count; i++) {
+      appjson *cat_obj = d->json_get_array_item(cats, i);
+      const char *cname =
+          d->json_get_string_value(d->json_get_object_item(cat_obj, "name"));
+      double cviews =
+          d->json_get_number_value(d->json_get_object_item(cat_obj, "views"));
+
+      d->ctext_append(t, "<div class='stat-item'><span class='stat-label'>");
+      d->ctext_append(t, cname);
+      d->ctext_append(t, "</span><span class='stat-value'>");
+      char cv_buf[64];
+      d->custom_sprintf(cv_buf, "%.0f", cviews);
+      d->ctext_append(t, cv_buf);
+      d->ctext_append(t, "</span></div>");
+    }
+  }
+
   d->ctext_append(t, "</div>");
+  d->json_delete(stats);
 
   d->ctext_append(t, "</aside>");
 
@@ -1398,6 +1420,129 @@ appjson *load_articles(appdeps *d, int page, int limit, const char *category,
 }
 
 // ===============================METRICS & DATA================================
+appjson *calculate_stats(appdeps *d) {
+  appjson *stats = d->json_create_object();
+  d->json_add_number_to_object(stats, "total_views", 0);
+  appjson *cats = d->json_create_array(); // Array of {name, views}
+  d->json_add_item_to_object(stats, "categories", cats);
+
+  // Iterate all articles
+  char *articles_root = d->concat_path(global_config.database_path, "articles");
+  d->printf("Debug: Articles root: %s\n", articles_root);
+  appstringarray *dates = d->list_dirs(articles_root);
+  d->free(articles_root);
+
+  if (!dates) {
+    d->printf("Debug: No dates found\n");
+    return stats;
+  }
+
+  long dates_count = d->get_stringarray_size(dates);
+  d->printf("Debug: Dates count: %ld\n", dates_count);
+  double total_views = 0;
+
+  for (int i = 0; i < dates_count; i++) {
+    const char *date_str = d->get_stringarray_item(dates, i);
+    char *date_path = d->concat_path(global_config.database_path, "articles");
+    char *tmp = d->concat_path(date_path, date_str);
+    d->free(date_path);
+    date_path = tmp;
+
+    appstringarray *article_ids = d->list_dirs(date_path);
+    if (article_ids) {
+      long arts_count = d->get_stringarray_size(article_ids);
+      d->printf("Debug: Date %s has %ld articles\n", date_str, arts_count);
+      for (int j = 0; j < arts_count; j++) {
+        const char *aid = d->get_stringarray_item(article_ids, j);
+
+        // 1. Get Categories
+        char *art_path = d->concat_path(date_path, aid);
+        char *json_path = d->concat_path(art_path, "data.json");
+
+        appjson *art_data = app_null;
+        if (d->file_exists(json_path)) {
+          art_data = d->json_parse_file(json_path);
+        }
+        d->free(json_path);
+
+        // 2. Get Views
+        char *metrics_root =
+            d->concat_path(global_config.database_path, "metrics");
+        char *art_metrics = d->concat_path(metrics_root, "articles");
+        d->free(metrics_root);
+        char *m_date_dir = d->concat_path(art_metrics, date_str);
+        d->free(art_metrics);
+        char *m_id_dir = d->concat_path(m_date_dir, aid);
+        d->free(m_date_dir);
+        char *views_file = d->concat_path(m_id_dir, "total_views.json");
+        d->free(m_id_dir);
+
+        double views = 0;
+        if (d->file_exists(views_file)) {
+          d->printf("Debug: Found views file: %s\n", views_file);
+          appjson *v_json = d->json_parse_file(views_file);
+          if (v_json) {
+            views = d->json_get_number_value(
+                d->json_get_object_item(v_json, "views"));
+            d->printf("Debug: Views: %f\n", views);
+            d->json_delete(v_json);
+          }
+        } else {
+          d->printf("Debug: Views file not found: %s\n", views_file);
+        }
+        d->free(views_file);
+
+        total_views += views;
+
+        // Aggregate Categories (Linear Scan on Array)
+        if (art_data) {
+          appjson *c_arr = d->json_get_object_item(art_data, "categories");
+          if (c_arr && d->json_is_array(c_arr)) {
+            int c_count = d->json_get_array_size(c_arr);
+            for (int k = 0; k < c_count; k++) {
+              const char *cname =
+                  d->json_get_string_value(d->json_get_array_item(c_arr, k));
+              if (cname) {
+                // Find in cats array
+                appbool found = app_false;
+                int cats_len = d->json_get_array_size(cats);
+                for (int m = 0; m < cats_len; m++) {
+                  appjson *cat_obj = d->json_get_array_item(cats, m);
+                  const char *ex_name = d->json_get_string_value(
+                      d->json_get_object_item(cat_obj, "name"));
+                  if (ex_name && d->strcmp(ex_name, cname) == 0) {
+                    double cv = d->json_get_number_value(
+                        d->json_get_object_item(cat_obj, "views"));
+                    d->json_replace_item_in_object(
+                        cat_obj, "views", d->json_create_number(cv + views));
+                    found = app_true;
+                    break;
+                  }
+                }
+                if (!found) {
+                  appjson *new_cat = d->json_create_object();
+                  d->json_add_string_to_object(new_cat, "name", cname);
+                  d->json_add_number_to_object(new_cat, "views", views);
+                  d->json_add_item_to_array(cats, new_cat);
+                }
+              }
+            }
+          }
+          d->json_delete(art_data);
+        }
+        d->free(art_path);
+      }
+      d->delete_stringarray(article_ids);
+    }
+    d->free(date_path);
+  }
+  d->delete_stringarray(dates);
+
+  d->json_replace_item_in_object(stats, "total_views",
+                                 d->json_create_number(total_views));
+  return stats;
+}
+
 appjson *load_author(appdeps *d, const char *author_id) {
   char *path = d->concat_path(global_config.database_path, "authors");
   char *tmp = d->concat_path(path, author_id);
