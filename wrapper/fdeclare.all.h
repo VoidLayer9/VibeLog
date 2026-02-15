@@ -222,25 +222,25 @@ int wrapper_start_server(int port, const appserverresponse *(*handler)(appdeps *
 CwebHttpResponse *main_internal_server_firmware(CwebHttpRequest *request, int argc, char *argv[]) ;
 //fdefine.std.c
 
-int wrapper_snprintf(char *str, unsigned long size, const char *format, ...);
+int wrapper_snprintf(char *str, unsigned long size, const char *format, ...) ;
+int wrapper_sprintf(char *str, const char *format, ...) ;
+unsigned long wrapper_strlen(const char *s) ;
 
-unsigned long wrapper_strlen(const char *s);
+void *wrapper_malloc(unsigned long size) ;
 
-void *wrapper_malloc(unsigned long size);
+void *wrapper_calloc(unsigned long num, unsigned long size) ;
 
-void *wrapper_calloc(unsigned long num, unsigned long size);
+void *wrapper_realloc(void *ptr, unsigned long size) ;
 
-void *wrapper_realloc(void *ptr, unsigned long size);
+char *wrapper_strdup(const char *s) ;
 
-char *wrapper_strdup(const char *s);
+void *wrapper_memcpy(void *dst, const void *src, unsigned long n) ;
 
-void *wrapper_memcpy(void *dst, const void *src, unsigned long n);
+void *wrapper_memset(void *s, int c, unsigned long n) ;
 
-void *wrapper_memset(void *s, int c, unsigned long n);
+int wrapper_strncmp(const char *s1, const char *s2, unsigned long n) ;
 
-int wrapper_strncmp(const char *s1, const char *s2, unsigned long n);
-
-int wrapper_memcmp(const void *s1, const void *s2, unsigned long n);//fdefine.text_stack.c
+int wrapper_memcmp(const void *s1, const void *s2, unsigned long n) ;//fdefine.text_stack.c
 
 
 void *wrapper_new_text_stack(const char *text) ;

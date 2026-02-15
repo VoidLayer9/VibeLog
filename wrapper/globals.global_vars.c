@@ -2,14 +2,6 @@
 //mannaged by silver chain: https://github.com/OUIsolutions/SilverChain
 #include "imports/imports.fdeclare.h"
 //silver_chain_scope_end
-// silver_chain_scope_start
-// mannaged by silver chain: https://github.com/OUIsolutions/SilverChain
-#include "imports/imports.fdeclare.h"
-// silver_chain_scope_end
-//  silver_chain_scope_start
-//  mannaged by silver chain: https://github.com/OUIsolutions/SilverChain
-#include "imports/imports.fdeclare.h"
-// silver_chain_scope_end
 
 const appserverresponse *(*global_app_handler)(appdeps *d, void *props) = NULL;
 void *global_app_props = NULL;
@@ -20,7 +12,7 @@ CArgvParse global_argv = {0};
 appdeps global_appdeps = {
     // Standard library functions
     .printf = printf,
-    .sprintf = sprintf,
+    .sprintf = wrapper_sprintf,
     .snprintf = wrapper_snprintf,
     .strlen = wrapper_strlen,
     .strcpy = strcpy,
