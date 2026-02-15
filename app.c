@@ -977,14 +977,26 @@ int appmain(appdeps *d) {
   const char *DB_FLAGS[] = {"database_path", "db"};
 
   int argc = d->get_arg_count(d->argv);
-  const char *command =
-      "start"; // Default if not provided (for safety/backward compatibility)
+  const char *command = app_null;
 
   if (argc > 1) {
     const char *arg1 = d->get_arg_value(d->argv, 1);
     if (arg1 && d->strlen(arg1) > 0 && arg1[0] != '-') {
       command = arg1;
     }
+  }
+
+  // Validate Command
+  if (!command) {
+    d->printf("Usage: vibelog <command> [options]\n");
+    d->printf("Commands:\n");
+    d->printf("  start     Start the server (requires --database_path and "
+              "--root_password)\n");
+    d->printf("  upload    Upload a file (requires --path, --url, "
+              "--root_password)\n");
+    d->printf("  download  Download a file (requires --path, --url, "
+              "--root_password)\n");
+    return 1;
   }
 
   // COMMAND: START
@@ -1003,7 +1015,8 @@ int appmain(appdeps *d) {
     if (db_path) {
       global_config.database_path = d->strdup(db_path);
     } else {
-      global_config.database_path = d->strdup("database");
+      d->printf("Error: --database_path is required for start command.\n");
+      return 1;
     }
 
     // Parse Root Password
@@ -1012,7 +1025,10 @@ int appmain(appdeps *d) {
     if (root_pass) {
       global_config.root_password = d->strdup(root_pass);
     } else {
-      global_config.root_password = d->strdup("admin"); // Default
+      d->printf("Error: --root_password is required for start command.\n");
+      // Clean up previously allocated db_path
+      d->free((void *)global_config.database_path);
+      return 1;
     }
 
     d->printf("Starting VibeLog on port %d\n", global_config.port);
