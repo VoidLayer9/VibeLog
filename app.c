@@ -30,7 +30,7 @@ struct appdeps {
   //=====================STD
   // FUNCTIONS==============================================
   int (*printf)(const char *format, ...);
-  int (*sprintf)(char *str, const char *format, ...);
+  int (*custom_sprintf)(char *str, const char *format, ...);
   int (*snprintf)(char *str, unsigned long size, const char *format, ...);
 
   unsigned long (*strlen)(const char *s);
@@ -759,10 +759,10 @@ const appserverresponse *handle_list_articles(appdeps *d,
   if (page > 1) {
     d->ctext_append(t, "<a href='/list_articles?page=");
     char buf[10];
-    d->sprintf(buf, "%d", page - 1);
+    d->custom_sprintf(buf, "%d", page - 1);
     d->ctext_append(t, buf);
     d->ctext_append(t, "&limit=");
-    d->sprintf(buf, "%d", limit);
+    d->custom_sprintf(buf, "%d", limit);
     d->ctext_append(t, buf);
     if (category) {
       d->ctext_append(t, "&category=");
@@ -781,10 +781,10 @@ const appserverresponse *handle_list_articles(appdeps *d,
   if (d->json_get_array_size(articles) == limit) {
     d->ctext_append(t, "<a href='/list_articles?page=");
     char buf[10];
-    d->sprintf(buf, "%d", page + 1);
+    d->custom_sprintf(buf, "%d", page + 1);
     d->ctext_append(t, buf);
     d->ctext_append(t, "&limit=");
-    d->sprintf(buf, "%d", limit);
+    d->custom_sprintf(buf, "%d", limit);
     d->ctext_append(t, buf);
     if (category) {
       d->ctext_append(t, "&category=");
@@ -1219,7 +1219,7 @@ long parse_date_to_ts(appdeps *d, const char *date) {
   year[3] = date[9];
 
   char buf[20];
-  d->sprintf(buf, "%s%s%s", year, month, day);
+  d->custom_sprintf(buf, "%s%s%s", year, month, day);
   return d->atoi(buf);
 }
 
@@ -1429,7 +1429,8 @@ void record_view(appdeps *d, const char *date, const char *id) {
   d->get_formatted_time(now, date_buf, 64, "%d-%m-%Y");
 
   char day_dir_name[128];
-  d->sprintf(day_dir_name, "%s:%ld", date_buf, now); // Just use current TS
+  d->custom_sprintf(day_dir_name, "%s:%ld", date_buf,
+                    now); // Just use current TS
 
   char *day_path = d->concat_path(views_dir, day_dir_name);
   if (!d->dir_exists(day_path))
@@ -1446,7 +1447,7 @@ void record_view(appdeps *d, const char *date, const char *id) {
 
   int rnd = d->get_random();
   char fname[64];
-  d->sprintf(fname, "view_%ld_%d.json", now, rnd);
+  d->custom_sprintf(fname, "view_%ld_%d.json", now, rnd);
 
   char *view_path = d->concat_path(day_path, fname);
   d->json_save_file(view, view_path);
