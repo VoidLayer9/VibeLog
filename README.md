@@ -17,6 +17,12 @@ Designed for "vibecoding" â€” programming with intent and aesthetic precision â€
 
 ## Installation & Setup
 
+### Pre-compiled Binaries (Recommended)
+
+Download the latest pre-compiled version for your platform from the [Releases page](https://github.com/VoidLayer9/VibeLog/releases/tag/0.0.1).
+
+### Build from Source
+
 1. **Clone the Repository**
    ```bash
    git clone https://github.com/your-username/vibelog.git
@@ -28,6 +34,35 @@ Designed for "vibecoding" â€” programming with intent and aesthetic precision â€
    ```bash
    gcc app.c -o vibelog
    ```
+
+   **Advanced Builds:**
+   
+   Ensure you have [Darwin](https://github.com/OUIsolutions/Darwin) installed. For cross-compilation targets, [Docker](https://docs.docker.com/get-docker/) or [Podman](https://podman.io/getting-started/installation) is required.
+
+   *   **Static Linux Binary** (Runs on any distro):
+       ```bash
+       darwin run_blueprint --target static_linux --provider docker
+       ```
+
+   *   **Windows Executable** (.exe):
+       ```bash
+       darwin run_blueprint --target windows --provider docker
+       ```
+
+   *   **Debian Package** (.deb):
+       ```bash
+       darwin run_blueprint --target deb --provider docker
+       ```
+
+   *   **RPM Package** (.rpm):
+       ```bash
+       darwin run_blueprint --target rpm --provider docker
+       ```
+
+   *   **Debug Mode** (Hot Reload):
+       ```bash
+       darwin run_blueprint --target debug --compiler "gcc"
+       ```
 
 3. **Initialize Database**
    The application expects a `database/` directory structure. See [Database Structure](#database-structure) below or refer to `prompts/1.database_creation.md` for a complete setup guide.
