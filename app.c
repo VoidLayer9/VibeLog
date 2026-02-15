@@ -802,7 +802,7 @@ const appserverresponse *handle_list_articles(appdeps *d,
 
 // =======================MANAGEMENT API========================================
 appbool check_auth(appdeps *d, const appserverrequest *req) {
-  const char *pass = d->get_server_header(req, "root_password");
+  const char *pass = d->get_server_header(req, "root-password");
   if (pass && global_config.root_password &&
       d->strcmp(pass, global_config.root_password) == 0) {
     return app_true;
@@ -1000,7 +1000,7 @@ appjson *fetch_remote_file_list(appdeps *d, const char *url_base,
 
   appclientrequest *req = d->newappclientrequest(full_url);
   d->appclientrequest_set_method(req, "POST"); // API says POST
-  d->appclientrequest_set_header(req, "root_password", pass);
+  d->appclientrequest_set_header(req, "root-password", pass);
   // No path header needed for full recursive list from root
 
   appclientresponse *resp = d->appclientrequest_fetch(req);
@@ -1020,7 +1020,7 @@ appjson *fetch_remote_file_list(appdeps *d, const char *url_base,
       }
     } else if (status == 401) {
       d->printf(
-          "Error: Authentication failed. Please check your --root_password.\n");
+          "Error: Authentication failed. Please check your --root-password.\n");
     } else if (status == 403) {
       d->printf("Error: Access denied (403).\n");
     } else if (status == 404) {
@@ -1168,7 +1168,7 @@ void perform_download_sync(appdeps *d, const char *local_path,
 
       appclientrequest *req = d->newappclientrequest(d_url);
       d->appclientrequest_set_method(req, "POST");
-      d->appclientrequest_set_header(req, "root_password", pass);
+      d->appclientrequest_set_header(req, "root-password", pass);
       d->appclientrequest_set_header(req, "path", f);
 
       appclientresponse *resp = d->appclientrequest_fetch(req);
@@ -1277,7 +1277,7 @@ void perform_upload_sync(appdeps *d, const char *local_path,
       if (content) {
         appclientrequest *req = d->newappclientrequest(u_url);
         d->appclientrequest_set_method(req, "POST");
-        d->appclientrequest_set_header(req, "root_password", pass);
+        d->appclientrequest_set_header(req, "root-password", pass);
         d->appclientrequest_set_header(req, "path", f);
         d->appclientrequest_set_body(req, (unsigned char *)content, fsize);
 
@@ -1316,14 +1316,14 @@ void perform_upload_sync(appdeps *d, const char *local_path,
 // ===============================MAIN==========================================
 int appmain(appdeps *d) {
   // Common Flags
-  const char *PASS_FLAGS[] = {"root_password", "pass"};
+  const char *PASS_FLAGS[] = {"root-password", "pass"};
   const char *URL_FLAGS[] = {"url", "u"};
   const char *PATH_FLAGS[] = {"path", "f"};
-  const char *CACHE_FLAGS[] = {"cache_dir", "c"};
+  const char *CACHE_FLAGS[] = {"cache-dir", "c"};
 
   // Server Flags
   const char *PORT_FLAGS[] = {"port", "p"};
-  const char *DB_FLAGS[] = {"database_path", "db"};
+  const char *DB_FLAGS[] = {"database-path", "db"};
 
   int argc = d->get_arg_count(d->argv);
   const char *command = app_null;
@@ -1339,12 +1339,12 @@ int appmain(appdeps *d) {
   if (!command) {
     d->printf("Usage: vibelog <command> [options]\n");
     d->printf("Commands:\n");
-    d->printf("  start     Start the server (requires --database_path and "
-              "--root_password)\n");
+    d->printf("  start     Start the server (requires --database-path and "
+              "--root-password)\n");
     d->printf("  upload    Upload a file (requires --path, --url, "
-              "--root_password, optional --cache_dir)\n");
+              "--root-password, optional --cache-dir)\n");
     d->printf("  download  Download a file (requires --path, --url, "
-              "--root_password, optional --cache_dir)\n");
+              "--root-password, optional --cache-dir)\n");
     return 1;
   }
 
@@ -1364,7 +1364,7 @@ int appmain(appdeps *d) {
     if (db_path) {
       global_config.database_path = d->strdup(db_path);
     } else {
-      d->printf("Error: --database_path is required for start command.\n");
+      d->printf("Error: --database-path is required for start command.\n");
       return 1;
     }
 
@@ -1374,7 +1374,7 @@ int appmain(appdeps *d) {
     if (root_pass) {
       global_config.root_password = d->strdup(root_pass);
     } else {
-      d->printf("Error: --root_password is required for start command.\n");
+      d->printf("Error: --root-password is required for start command.\n");
       // Clean up previously allocated db_path
       d->free((void *)global_config.database_path);
       return 1;
@@ -1408,8 +1408,8 @@ int appmain(appdeps *d) {
         d->argv, PASS_FLAGS, sizeof(PASS_FLAGS) / sizeof(PASS_FLAGS[0]), 0);
 
     if (!db_path || !url_base || !pass) {
-      d->printf("Usage: vibelog upload --database_path <dir> --url <url> "
-                "--root_password <pass>\n");
+      d->printf("Usage: vibelog upload --database-path <dir> --url <url> "
+                "--root-password <pass>\n");
       return 1;
     }
 
@@ -1447,8 +1447,8 @@ int appmain(appdeps *d) {
         d->argv, PASS_FLAGS, sizeof(PASS_FLAGS) / sizeof(PASS_FLAGS[0]), 0);
 
     if (!db_path || !url_base || !pass) {
-      d->printf("Usage: vibelog download --database_path <dir> --url <url> "
-                "--root_password <pass>\n");
+      d->printf("Usage: vibelog download --database-path <dir> --url <url> "
+                "--root-password <pass>\n");
       return 1;
     }
 

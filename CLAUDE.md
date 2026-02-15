@@ -13,7 +13,7 @@ The project uses a sandboxed architecture where application logic stays in `app.
 **Simple compile and run (most common):**
 ```bash
 gcc main.c -o vibelog
-./vibelog start --database_path ./database --root_password your_password
+./vibelog start --database-path ./database --root-password your_password
 ```
 
 **Debug mode with hot-reload** (requires Darwin + CWebStudioFirmware):
@@ -31,9 +31,9 @@ darwin run_blueprint --target rpm --provider docker
 ```
 
 **VibeLog CLI Commands:**
-- Start server: `./vibelog start --port 8080 --database_path ./database --root_password secret`
-- Upload content: `./vibelog upload --path database/articles/new-post --url http://server:8080 --root_password secret`
-- Download content: `./vibelog download --path database --url http://server:8080 --root_password secret`
+- Start server: `./vibelog start --port 8080 --database-path ./database --root-password secret`
+- Upload content: `./vibelog upload --path database/articles/new-post --url http://server:8080 --root-password secret`
+- Download content: `./vibelog download --path database --url http://server:8080 --root-password secret`
 
 Default server port is 8080 if not specified.
 

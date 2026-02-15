@@ -77,29 +77,29 @@ VibeLog includes a CLI for starting the server and managing content synchronizat
 Run the blog locally or in production:
 
 ```bash
-./vibelog start --port 8080 --database_path ./database --root_password secret_pass
+./vibelog start --port 8080 --database-path ./database --root-password secret_pass
 ```
 
 *   `--port`: Port to listen on (default: 8080).
-*   `--database_path`: Path to the database folder (required).
-*   `--root_password`: Admin password for API operations (required).
+*   `--database-path`: Path to the database folder (required).
+*   `--root-password`: Admin password for API operations (required).
 
 ### 2. Upload Content (Sync Up)
 Upload a local file or directory to a remote VibeLog instance:
 
 ```bash
-./vibelog upload --path database/articles/new-post --url http://remote-server:8080 --root_password secret_pass
+./vibelog upload --path database/articles/new-post --url http://remote-server:8080 --root-password secret_pass
 ```
 
 *   `--path`: Local path to upload.
 *   `--url`: URL of the remote server.
-*   `--root_password`: Must match the remote server's password.
+*   `--root-password`: Must match the remote server's password.
 
 ### 3. Download Content (Sync Down)
 Download files from a remote instance to your local environment:
 
 ```bash
-./vibelog download --path database --url http://remote-server:8080 --root_password secret_pass
+./vibelog download --path database --url http://remote-server:8080 --root-password secret_pass
 ```
 
 ---
