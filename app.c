@@ -864,6 +864,66 @@ const appserverresponse *handle_api_read_file(appdeps *d,
   return resp;
 }
 
+// Helper to clean up empty directories after file deletion
+void cleanup_empty_parents(appdeps *d, const char *deleted_file_path,
+                           const char *root_path) {
+  char *current_dir = d->strdup(deleted_file_path);
+
+  // Start with the parent directory of the file
+  int len = d->strlen(current_dir);
+  for (int i = len - 1; i >= 0; i--) {
+    if (current_dir[i] == '/') {
+      current_dir[i] = 0; // Truncate to parent
+      break;
+    }
+  }
+
+  while (1) {
+    // Stop if we reached root or gone outside
+    if (d->strlen(current_dir) <= d->strlen(root_path))
+      break;
+    if (d->strncmp(current_dir, root_path, d->strlen(root_path)) != 0)
+      break;
+
+    // Check if directory is empty
+    appstringarray *files = d->list_files_recursively(current_dir);
+    long count = 0;
+    if (files) {
+      count = d->get_stringarray_size(files);
+      d->delete_stringarray(files);
+    }
+
+    if (count == 0) {
+      // Attempt delete
+      d->delete_any(current_dir);
+
+      // Verify if it's gone
+      if (d->dir_exists(current_dir)) {
+        // Still exists, maybe not empty (hidden files?) or permission issue
+        break;
+      }
+    } else {
+      // Not empty
+      break;
+    }
+
+    // Move to parent
+    len = d->strlen(current_dir);
+    int found_slash = 0;
+    for (int i = len - 1; i >= 0; i--) {
+      if (current_dir[i] == '/') {
+        current_dir[i] = 0;
+        found_slash = 1;
+        break;
+      }
+    }
+    if (!found_slash)
+      break;
+  }
+
+  d->free(current_dir);
+}
+
 const appserverresponse *handle_api_delete_file(appdeps *d,
                                                 const appserverrequest *req) {
   if (!check_auth(d, req))
@@ -878,6 +938,8 @@ const appserverresponse *handle_api_delete_file(appdeps *d,
 
   char *full_path = d->concat_path(global_config.database_path, path);
   d->delete_any(full_path);
+  cleanup_empty_parents(d, full_path,
+                        global_config.database_path); // Cleanup dirs
   d->free(full_path);
 
   return d->send_text("OK", "text/plain", 200);
@@ -1227,6 +1289,7 @@ void perform_download_sync(appdeps *d, const char *local_path,
       d->printf("Deleting local file %s (not on server)...\n", f);
       char *full_path = d->concat_path(local_path, f);
       d->delete_any(full_path);
+      cleanup_empty_parents(d, full_path, local_path); // Cleanup dirs
       d->free(full_path);
       deleted++;
     }
