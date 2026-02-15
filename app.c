@@ -349,6 +349,7 @@ appjson *load_articles(appdeps *d, int page, int limit, const char *category,
                        const char *search, const char *author_id);
 appjson *load_author(appdeps *d, const char *author_id);
 void record_view(appdeps *d, const char *date, const char *id);
+void record_page_view(appdeps *d, const char *page_id);
 
 // ===============================HANDLERS======================================
 const appserverresponse *handle_article(appdeps *d,
@@ -767,6 +768,7 @@ render_article_list_response(appdeps *d, const char *title, int page, int limit,
 
 const appserverresponse *handle_home(appdeps *d, const appserverrequest *req) {
   load_global_data(d);
+  record_page_view(d, "home");
   // Home behaves like list_articles with default params (page=1, limit=10)
   return render_article_list_response(d, "Latest Articles", 1, 10, app_null,
                                       app_null);
@@ -775,6 +777,7 @@ const appserverresponse *handle_home(appdeps *d, const appserverrequest *req) {
 const appserverresponse *handle_list_articles(appdeps *d,
                                               const appserverrequest *req) {
   load_global_data(d);
+  record_page_view(d, "listings");
 
   // Parse Params
   const char *page_str = d->get_server_query_param(req, "page");
@@ -1861,6 +1864,37 @@ appjson *calculate_stats(appdeps *d) {
   d->printf("Debug: Dates count: %ld\n", dates_count);
   double total_views = 0;
 
+  // Add Page Views
+  char *metrics_root = d->concat_path(global_config.database_path, "metrics");
+  char *pages_metrics = d->concat_path(metrics_root, "pages");
+  d->free(metrics_root);
+
+  if (d->dir_exists(pages_metrics)) {
+    appstringarray *pages = d->list_dirs(pages_metrics);
+    if (pages) {
+      long p_count = d->get_stringarray_size(pages);
+      for (int i = 0; i < p_count; i++) {
+        const char *pid = d->get_stringarray_item(pages, i);
+        char *p_dir = d->concat_path(pages_metrics, pid);
+        char *pv_file = d->concat_path(p_dir, "total_views.json");
+        d->free(p_dir);
+
+        if (d->file_exists(pv_file)) {
+          appjson *pv_json = d->json_parse_file(pv_file);
+          if (pv_json) {
+            double pv = d->json_get_number_value(
+                d->json_get_object_item(pv_json, "views"));
+            total_views += pv;
+            d->json_delete(pv_json);
+          }
+        }
+        d->free(pv_file);
+      }
+      d->delete_stringarray(pages);
+    }
+  }
+  d->free(pages_metrics);
+
   for (int i = 0; i < dates_count; i++) {
     const char *date_str = d->get_stringarray_item(dates, i);
     char *date_path = d->concat_path(global_config.database_path, "articles");
@@ -2057,4 +2091,82 @@ void record_view(appdeps *d, const char *date, const char *id) {
   d->free(day_path);
   d->free(views_dir);
   d->free(id_dir);
+}
+void record_page_view(appdeps *d, const char *page_id) {
+  // 1. Setup paths
+  char *metrics_root = d->concat_path(global_config.database_path, "metrics");
+  char *pages_metrics = d->concat_path(metrics_root, "pages");
+  d->free(metrics_root);
+
+  if (!d->dir_exists(pages_metrics)) {
+    d->create_dir(pages_metrics);
+  }
+
+  char *page_dir = d->concat_path(pages_metrics, page_id);
+  d->free(pages_metrics);
+
+  if (!d->dir_exists(page_dir)) {
+    d->create_dir(page_dir);
+  }
+
+  // 2. Atomic Total Views Update
+  char *total_views_path = d->concat_path(page_dir, "total_views.json");
+  appjson *totals = app_null;
+
+  if (d->file_exists(total_views_path)) {
+    totals = d->json_parse_file(total_views_path);
+  }
+
+  if (!totals) {
+    totals = d->json_create_object();
+    d->json_add_number_to_object(totals, "views", 0);
+  }
+
+  appjson *v_item = d->json_get_object_item(totals, "views");
+  double v = d->json_get_number_value(v_item);
+  d->json_replace_item_in_object(totals, "views", d->json_create_number(v + 1));
+
+  char *tmp_path = d->concat_path(page_dir, "total_views.json.tmp");
+  d->json_save_file(totals, tmp_path);
+  d->move_any(tmp_path, total_views_path);
+
+  d->free(tmp_path);
+  d->free(total_views_path);
+  d->json_delete(totals);
+
+  // 3. Individual View Record
+  char *views_dir = d->concat_path(page_dir, "views");
+  if (!d->dir_exists(views_dir))
+    d->create_dir(views_dir);
+
+  long now = d->get_unix_time();
+  char date_buf[64];
+  d->get_formatted_time(now, date_buf, 64, "%d-%m-%Y");
+
+  char day_dir_name[128];
+  d->custom_sprintf(day_dir_name, "%s:%ld", date_buf, now);
+
+  char *day_path = d->concat_path(views_dir, day_dir_name);
+  if (!d->dir_exists(day_path))
+    d->create_dir(day_path);
+
+  appjson *view = d->json_create_object();
+  char iso_buf[64];
+  d->get_formatted_time(now, iso_buf, 64, "%Y-%m-%dT%H:%M:%SZ");
+  d->json_add_string_to_object(view, "date", iso_buf);
+  d->json_add_string_to_object(view, "page", page_id);
+  d->json_add_number_to_object(view, "duration", 0);
+
+  int rnd = d->get_random();
+  char fname[64];
+  d->custom_sprintf(fname, "view_%ld_%d.json", now, rnd);
+
+  char *view_path = d->concat_path(day_path, fname);
+  d->json_save_file(view, view_path);
+
+  d->free(view_path);
+  d->json_delete(view);
+  d->free(day_path);
+  d->free(views_dir);
+  d->free(page_dir);
 }
