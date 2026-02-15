@@ -1,0 +1,10 @@
+{
+    "title": "Welcome to VibeLog",
+    "summary": "This is the first dynamic generation test of the VibeLog engine. Pure C, No SQL, Just Vibes.",
+    "author_id": "mateus",
+    "thumbnail": "assets/thumbnail.jpg",
+    "categories": [
+        "vibecoding",
+        "welcome"
+    ]
+}

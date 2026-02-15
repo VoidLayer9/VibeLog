@@ -318,22 +318,1142 @@ struct appdeps {
   long (*ctext_index_of_char)(appctext *text_stack, char element);
 };
 
-const appserverresponse *private_mainserver(appdeps *d, void *props) {
-  return d->send_text("Hello World", "text/plain", 200);
-}
+// ===============================VIBELOG CONFIG================================
+typedef struct {
+  const char *database_path;
+  const char *root_password;
+  int port;
+} VibeLogConfig;
 
-int appmain(appdeps *d) {
-  const char *PORT_FLAGS[] = {"port", "p"};
-  const char *start_port = d->get_arg_flag_value(
-      d->argv, PORT_FLAGS, sizeof(PORT_FLAGS) / sizeof(PORT_FLAGS[0]), 0);
-  int port = 8080;
-  if (start_port) {
-    port = d->atoi(start_port);
-    if (port <= 0) {
-      d->printf("Invalid port number: %s\n", start_port);
-      return 1;
+VibeLogConfig global_config = {0};
+
+// cache
+appjson *cached_categories = app_null;
+
+// ===============================HELPER PROTOTYPES=============================
+const char *get_mime_type(appdeps *d, const char *path);
+appbool is_safe_path(appdeps *d, const char *path) {
+  if (d->strstr(path, ".."))
+    return app_false;
+  // Check null bytes? String functions usually fail on them anyway.
+  return app_true;
+}
+char *render_page(appdeps *d, const char *title, const char *content);
+void load_global_data(appdeps *d);
+appjson *load_articles(appdeps *d, int page, int limit, const char *category,
+                       const char *search, const char *author_id);
+appjson *load_author(appdeps *d, const char *author_id);
+void record_view(appdeps *d, const char *date, const char *id);
+
+// ===============================HANDLERS======================================
+const appserverresponse *handle_article(appdeps *d,
+                                        const appserverrequest *req) {
+  const char *date = d->get_server_query_param(req, "date");
+  const char *id = d->get_server_query_param(req, "id");
+
+  if (!date || !id)
+    return d->send_text("Missing parameters", "text/plain", 400);
+
+  // Load Article Data
+  char *path = d->concat_path(global_config.database_path, "articles");
+  char *tmp = d->concat_path(path, date);
+  d->free(path);
+  path = d->concat_path(tmp, id);
+  d->free(tmp);
+
+  char *json_path = d->concat_path(path, "data.json");
+  if (!d->file_exists(json_path)) {
+    d->free(json_path);
+    d->free(path);
+    return d->send_text("Article not found", "text/plain", 404);
+  }
+
+  appjson *data = d->json_parse_file(json_path);
+  d->free(json_path);
+
+  if (!data) {
+    d->free(path);
+    return d->send_text("Corrupt article data", "text/plain", 500);
+  }
+
+  // Record View (Async? No, synchronous per prompt)
+  record_view(d, date, id);
+
+  // Wrapper for content
+  appctext *t = d->new_ctext(app_null);
+
+  // Title
+  const char *title =
+      d->json_get_string_value(d->json_get_object_item(data, "title"));
+  d->ctext_append(t, "<article class='article-container'>");
+  d->ctext_append(t, "<h1 class='article-title'>");
+  d->ctext_append(t, title);
+  d->ctext_append(t, "</h1>");
+
+  // Categories
+  appjson *cats = d->json_get_object_item(data, "categories");
+  if (cats && d->json_is_array(cats)) {
+    d->ctext_append(t, "<div class='article-categories'>");
+    int c_size = d->json_get_array_size(cats);
+    for (int i = 0; i < c_size; i++) {
+      const char *cname =
+          d->json_get_string_value(d->json_get_array_item(cats, i));
+      d->ctext_append(t, "<span class='badge' style='margin-right:0.5rem'>");
+      d->ctext_append(t, cname);
+      d->ctext_append(t, "</span>");
+    }
+    d->ctext_append(t, "</div>");
+  }
+
+  d->ctext_append(t, "<div class='article-meta' style='margin-bottom:2rem; "
+                     "color:#71717a;'>Published on ");
+  d->ctext_append(t, date);
+  d->ctext_append(t, "</div>");
+
+  // Content (en.html default)
+  char *content_dir = d->concat_path(path, "content");
+  char *content_path =
+      d->concat_path(content_dir, "en.html"); // TODO: Lang detection
+  char *html_content = d->read_string(content_path);
+
+  if (html_content) {
+    d->ctext_append(t, "<div class='article-body' style='line-height:1.8'>");
+    d->ctext_append(t, html_content);
+    d->ctext_append(t, "</div>");
+    d->free(html_content);
+  } else {
+    d->ctext_append(t, "<p>Content not available.</p>");
+  }
+  d->free(content_path);
+  d->free(content_dir);
+
+  // Author
+  const char *author_id =
+      d->json_get_string_value(d->json_get_object_item(data, "author_id"));
+  if (author_id) {
+    appjson *author = load_author(d, author_id);
+    if (author) {
+      const char *aname =
+          d->json_get_string_value(d->json_get_object_item(author, "name"));
+      const char *apic =
+          d->json_get_string_value(d->json_get_object_item(author, "picture"));
+
+      d->ctext_append(t, "<div class='author-box' style='margin-top:4rem; "
+                         "border-top:1px solid #1c1c1f; padding-top:2rem; "
+                         "display:flex; align-items:center; gap:1rem;'>");
+      if (apic) {
+        // TODO: Fix path resolution for images (author dir?)
+        // database/authors/<id>/<pic>
+        // Route: /database_file?path=authors/<id>/<pic>
+        d->ctext_append(t, "<img src='/database_file?path=authors/");
+        d->ctext_append(t, author_id);
+        d->ctext_append(t, "/");
+        d->ctext_append(t, apic);
+        d->ctext_append(t,
+                        "' style='width:64px; height:64px; border-radius:50%; "
+                        "object-fit:cover; border:1px solid #1c1c1f;'>");
+      }
+      d->ctext_append(t,
+                      "<div><div style='font-weight:600; font-size:1.1rem;'>");
+      d->ctext_append(t, aname);
+      d->ctext_append(t, "</div><a href='/author?id=");
+      d->ctext_append(t, author_id);
+      d->ctext_append(t,
+                      "' class='btn' style='font-size:0.7rem; padding:0.2rem "
+                      "0.5rem; margin-top:0.5rem;'>View Profile</a></div>");
+
+      d->ctext_append(t, "</div>");
+      d->json_delete(author);
     }
   }
-  d->start_server(port, private_mainserver, app_null, app_false);
+
+  d->ctext_append(t, "</article>");
+
+  d->free(path);
+  d->json_delete(data);
+
+  load_global_data(d); // For navbar
+  char *full_html = render_page(d, title, d->ctext_get_text(t));
+  d->ctext_free(t);
+
+  const appserverresponse *resp = d->send_text(full_html, "text/html", 200);
+  d->free(full_html);
+  return resp;
+}
+const appserverresponse *handle_author(appdeps *d,
+                                       const appserverrequest *req) {
+  const char *id = d->get_server_query_param(req, "id");
+  if (!id)
+    return d->send_text("Missing author id", "text/plain", 400);
+
+  appjson *author = load_author(d, id);
+  if (!author)
+    return d->send_text("Author not found", "text/plain", 404);
+
+  const char *name =
+      d->json_get_string_value(d->json_get_object_item(author, "name"));
+  const char *desc =
+      d->json_get_string_value(d->json_get_object_item(author, "description"));
+  const char *pic =
+      d->json_get_string_value(d->json_get_object_item(author, "picture"));
+
+  appctext *t = d->new_ctext(app_null);
+
+  d->ctext_append(t, "<div class='author-profile' style='text-align:center; "
+                     "margin-bottom:4rem;'>");
+  if (pic) {
+    d->ctext_append(t, "<img src='/database_file?path=authors/");
+    d->ctext_append(t, id);
+    d->ctext_append(t, "/");
+    d->ctext_append(t, pic);
+    d->ctext_append(
+        t, "' style='width:128px; height:128px; border-radius:50%; "
+           "object-fit:cover; border:1px solid #1c1c1f; margin-bottom:1rem;'>");
+  }
+  d->ctext_append(t, "<h1>");
+  d->ctext_append(t, name);
+  d->ctext_append(t, "</h1>");
+  d->ctext_append(t,
+                  "<p style='color:#71717a; max-width:600px; margin:0 auto;'>");
+  d->ctext_append(t, desc);
+  d->ctext_append(t, "</p></div>");
+
+  d->ctext_append(t, "<h2>Recent Articles by ");
+  d->ctext_append(t, name);
+  d->ctext_append(t, "</h2>");
+
+  // Load articles by author
+  appjson *articles = load_articles(d, 1, 20, app_null, app_null, id);
+
+  if (d->json_get_array_size(articles) == 0) {
+    d->ctext_append(t, "<p>No articles found.</p>");
+  } else {
+    int count = d->json_get_array_size(articles);
+    for (int i = 0; i < count; i++) {
+      appjson *art = d->json_get_array_item(articles, i);
+      const char *title =
+          d->json_get_string_value(d->json_get_object_item(art, "title"));
+      const char *date =
+          d->json_get_string_value(d->json_get_object_item(art, "date"));
+      const char *art_id =
+          d->json_get_string_value(d->json_get_object_item(art, "id"));
+
+      d->ctext_append(t, "<div class='card' style='padding:1rem;'>");
+      d->ctext_append(t, "<h3><a href='/article?date=");
+      d->ctext_append(t, date);
+      d->ctext_append(t, "&id=");
+      d->ctext_append(t, art_id);
+      d->ctext_append(t, "'>");
+      d->ctext_append(t, title);
+      d->ctext_append(t, "</a></h3>");
+      d->ctext_append(t, "<span style='color:#71717a; font-size:0.8rem;'>");
+      d->ctext_append(t, date);
+      d->ctext_append(t, "</span>");
+      d->ctext_append(t, "</div>");
+    }
+  }
+  d->json_delete(articles);
+  d->json_delete(author);
+
+  char *full_html = render_page(d, name, d->ctext_get_text(t));
+  d->ctext_free(t);
+  const appserverresponse *resp = d->send_text(full_html, "text/html", 200);
+  d->free(full_html);
+  return resp;
+}
+
+const appserverresponse *handle_about(appdeps *d, const appserverrequest *req) {
+  char *path = d->concat_path(global_config.database_path, "pages");
+  char *about_path = d->concat_path(path, "about.html");
+  d->free(path);
+
+  char *content = app_null;
+  if (d->file_exists(about_path)) {
+    content = d->read_string(about_path);
+  }
+  d->free(about_path);
+
+  char *full_html = render_page(
+      d, "About",
+      content ? content : "<h1>About</h1><p>Content to be added.</p>");
+  if (content)
+    d->free(content);
+
+  const appserverresponse *resp = d->send_text(full_html, "text/html", 200);
+  d->free(full_html);
+  return resp;
+}
+const appserverresponse *handle_database_file(appdeps *d,
+                                              const appserverrequest *req) {
+  const char *path = d->get_server_query_param(req, "path");
+  if (!path) {
+    return d->send_text("Missing path parameter", "text/plain", 400);
+  }
+
+  // Security check: path traversal
+  if (!d->file_exists(path) && !d->dir_exists(path)) {
+    // Basic check, realpath would be better but we rely on sandbox tools
+    // For now, let's assume if it contains ".." it's bad
+    if (d->strstr(path, "..")) {
+      return d->send_text("Access denied", "text/plain", 403);
+    }
+  }
+
+  char *full_path = d->concat_path(global_config.database_path, path);
+
+  if (!d->file_exists(full_path)) {
+    d->free(full_path);
+    return d->send_text("File not found", "text/plain", 404);
+  }
+
+  const char *mime = get_mime_type(d, path);
+  const appserverresponse *resp = d->send_file(full_path, mime, 200);
+  d->free(full_path);
+  return resp;
+}
+
+const appserverresponse *handle_home(appdeps *d, const appserverrequest *req) {
+  load_global_data(d);
+
+  appjson *articles = load_articles(d, 1, 5, app_null, app_null, app_null);
+
+  appctext *t = d->new_ctext(app_null);
+
+  if (d->json_get_array_size(articles) == 0) {
+    d->ctext_append(t, "<div class='card'><div class='card-title'>No articles "
+                       "found</div></div>");
+  } else {
+    int count = d->json_get_array_size(articles);
+    for (int i = 0; i < count; i++) {
+      appjson *art = d->json_get_array_item(articles, i);
+      const char *title =
+          d->json_get_string_value(d->json_get_object_item(art, "title"));
+      const char *summary =
+          d->json_get_string_value(d->json_get_object_item(art, "summary"));
+      const char *date =
+          d->json_get_string_value(d->json_get_object_item(art, "date"));
+      const char *id =
+          d->json_get_string_value(d->json_get_object_item(art, "id"));
+
+      d->ctext_append(t, "<div class='card'>");
+      d->ctext_append(t,
+                      "<div class='card-image'></div>"); // Placeholder for now
+      d->ctext_append(t, "<h2 class='card-title'><a href='/article?date=");
+      d->ctext_append(t, date);
+      d->ctext_append(t, "&id=");
+      d->ctext_append(t, id);
+      d->ctext_append(t, "'>");
+      d->ctext_append(t, title);
+      d->ctext_append(t, "</a></h2>");
+
+      d->ctext_append(t, "<div class='card-meta'><span>");
+      d->ctext_append(t, date);
+      d->ctext_append(t, "</span></div>");
+
+      d->ctext_append(t, "<div class='card-summary'>");
+      d->ctext_append(t, summary);
+      d->ctext_append(t, "</div>");
+
+      d->ctext_append(t, "</div>");
+    }
+  }
+
+  d->json_delete(articles);
+
+  char *full_html = render_page(d, "Home", d->ctext_get_text(t));
+  d->ctext_free(t);
+
+  const appserverresponse *resp = d->send_text(full_html, "text/html", 200);
+  d->free(full_html);
+  return resp;
+}
+
+const appserverresponse *handle_list_articles(appdeps *d,
+                                              const appserverrequest *req) {
+  load_global_data(d);
+
+  // Parse Params
+  const char *page_str = d->get_server_query_param(req, "page");
+  const char *limit_str = d->get_server_query_param(req, "limit");
+  const char *category = d->get_server_query_param(req, "category");
+  const char *search = d->get_server_query_param(req, "search");
+
+  int page = 1;
+  if (page_str)
+    page = d->atoi(page_str);
+  if (page < 1)
+    page = 1;
+
+  int limit = 10;
+  if (limit_str)
+    limit = d->atoi(limit_str);
+  if (limit < 1)
+    limit = 10;
+  if (limit > 50)
+    limit = 50;
+
+  appjson *articles = load_articles(d, page, limit, category, search, app_null);
+
+  appctext *t = d->new_ctext(app_null);
+  d->ctext_append(t, "<h1>Articles</h1>");
+
+  // Filter info
+  if (category || search) {
+    d->ctext_append(t, "<div class='filter-info'>Filtering by: ");
+    if (category) {
+      d->ctext_append(t, "<span class='badge'>");
+      d->ctext_append(t, category);
+      d->ctext_append(t, "</span> ");
+    }
+    if (search) {
+      d->ctext_append(t, " \"");
+      d->ctext_append(t, search);
+      d->ctext_append(t, "\"");
+    }
+    d->ctext_append(
+        t, " <a href='/list_articles' class='btn' style='padding:0.2rem "
+           "0.5rem; margin-left:1rem; font-size:0.7rem'>Clear</a></div><br>");
+  }
+
+  if (d->json_get_array_size(articles) == 0) {
+    d->ctext_append(t, "<div class='card'><div class='card-title'>No articles "
+                       "found</div></div>");
+  } else {
+    int count = d->json_get_array_size(articles);
+    for (int i = 0; i < count; i++) {
+      appjson *art = d->json_get_array_item(articles, i);
+      const char *title =
+          d->json_get_string_value(d->json_get_object_item(art, "title"));
+      const char *summary =
+          d->json_get_string_value(d->json_get_object_item(art, "summary"));
+      const char *date =
+          d->json_get_string_value(d->json_get_object_item(art, "date"));
+      const char *id =
+          d->json_get_string_value(d->json_get_object_item(art, "id"));
+
+      d->ctext_append(t, "<div class='card'>");
+      d->ctext_append(t, "<div class='card-image'></div>");
+      d->ctext_append(t, "<h2 class='card-title'><a href='/article?date=");
+      d->ctext_append(t, date);
+      d->ctext_append(t, "&id=");
+      d->ctext_append(t, id);
+      d->ctext_append(t, "'>");
+      d->ctext_append(t, title);
+      d->ctext_append(t, "</a></h2>");
+
+      d->ctext_append(t, "<div class='card-meta'><span>");
+      d->ctext_append(t, date);
+      d->ctext_append(t, "</span></div>");
+
+      d->ctext_append(t, "<div class='card-summary'>");
+      d->ctext_append(t, summary);
+      d->ctext_append(t, "</div>");
+
+      d->ctext_append(t, "</div>");
+    }
+  }
+
+  // Pagination Controls
+  d->ctext_append(t, "<div class='pagination' style='display:flex; gap:1rem; "
+                     "justify-content:center; margin-top:2rem;'>");
+  if (page > 1) {
+    d->ctext_append(t, "<a href='/list_articles?page=");
+    char buf[10];
+    d->sprintf(buf, "%d", page - 1);
+    d->ctext_append(t, buf);
+    d->ctext_append(t, "&limit=");
+    d->sprintf(buf, "%d", limit);
+    d->ctext_append(t, buf);
+    if (category) {
+      d->ctext_append(t, "&category=");
+      d->ctext_append(t, category);
+    }
+    if (search) {
+      d->ctext_append(t, "&search=");
+      d->ctext_append(t, search);
+    }
+    d->ctext_append(t, "' class='btn'>Previous</a>");
+  }
+
+  // We don't know total/next without loading all, but load_articles pagination
+  // slices it. Optimization: load_articles could return total count? For now,
+  // simple "Next" if we invoked full limit
+  if (d->json_get_array_size(articles) == limit) {
+    d->ctext_append(t, "<a href='/list_articles?page=");
+    char buf[10];
+    d->sprintf(buf, "%d", page + 1);
+    d->ctext_append(t, buf);
+    d->ctext_append(t, "&limit=");
+    d->sprintf(buf, "%d", limit);
+    d->ctext_append(t, buf);
+    if (category) {
+      d->ctext_append(t, "&category=");
+      d->ctext_append(t, category);
+    }
+    if (search) {
+      d->ctext_append(t, "&search=");
+      d->ctext_append(t, search);
+    }
+    d->ctext_append(t, "' class='btn'>Next</a>");
+  }
+  d->ctext_append(t, "</div>");
+
+  d->json_delete(articles);
+
+  char *full_html = render_page(d, "Articles", d->ctext_get_text(t));
+  d->ctext_free(t);
+  const appserverresponse *resp = d->send_text(full_html, "text/html", 200);
+  d->free(full_html);
+  return resp;
+}
+
+// =======================MANAGEMENT API========================================
+appbool check_auth(appdeps *d, const appserverrequest *req) {
+  const char *pass = d->get_server_header(req, "root_password");
+  if (pass && global_config.root_password &&
+      d->strcmp(pass, global_config.root_password) == 0) {
+    return app_true;
+  }
+  return app_false;
+}
+
+const appserverresponse *handle_api_write_file(appdeps *d,
+                                               const appserverrequest *req) {
+  if (!check_auth(d, req))
+    return d->send_text("Unauthorized", "text/plain", 401);
+
+  const char *path = d->get_server_header(req, "path");
+  if (!path)
+    return d->send_text("Missing path header", "text/plain", 400);
+
+  if (!is_safe_path(d, path))
+    return d->send_text("Invalid path", "text/plain", 403);
+
+  long body_size = 0;
+  const unsigned char *body =
+      d->read_server_body(req, 1024 * 1024 * 10, &body_size); // 10MB Limit
+
+  char *full_path = d->concat_path(global_config.database_path, path);
+  d->write_any(full_path, body, body_size);
+  d->free(full_path);
+
+  return d->send_text("OK", "text/plain", 200);
+}
+
+const appserverresponse *handle_api_read_file(appdeps *d,
+                                              const appserverrequest *req) {
+  if (!check_auth(d, req))
+    return d->send_text("Unauthorized", "text/plain", 401);
+
+  const char *path = d->get_server_header(req, "path");
+  if (!path)
+    return d->send_text("Missing path header", "text/plain", 400);
+
+  if (!is_safe_path(d, path))
+    return d->send_text("Invalid path", "text/plain", 403);
+
+  char *full_path = d->concat_path(global_config.database_path, path);
+  if (!d->file_exists(full_path)) {
+    d->free(full_path);
+    return d->send_text("File not found", "text/plain", 404);
+  }
+
+  const char *mime = get_mime_type(d, path);
+  const appserverresponse *resp = d->send_file(full_path, mime, 200);
+  d->free(full_path);
+  return resp;
+}
+
+const appserverresponse *handle_api_delete_file(appdeps *d,
+                                                const appserverrequest *req) {
+  if (!check_auth(d, req))
+    return d->send_text("Unauthorized", "text/plain", 401);
+
+  const char *path = d->get_server_header(req, "path");
+  if (!path)
+    return d->send_text("Missing path header", "text/plain", 400);
+  if (!is_safe_path(d, path))
+    return d->send_text("Invalid path", "text/plain", 403);
+
+  char *full_path = d->concat_path(global_config.database_path, path);
+  d->delete_any(full_path);
+  d->free(full_path);
+
+  return d->send_text("OK", "text/plain", 200);
+}
+
+const appserverresponse *handle_api_list_files(appdeps *d,
+                                               const appserverrequest *req) {
+  if (!check_auth(d, req))
+    return d->send_text("Unauthorized", "text/plain", 401);
+
+  const char *rel_path = d->get_server_header(req, "path");
+  char *target_dir = app_null;
+  if (rel_path) {
+    if (!is_safe_path(d, rel_path))
+      return d->send_text("Invalid path", "text/plain", 403);
+    target_dir = d->concat_path(global_config.database_path, rel_path);
+  } else {
+    target_dir = d->strdup(global_config.database_path);
+  }
+
+  appstringarray *files = d->list_files_recursively(target_dir);
+
+  appjson *arr = d->json_create_array();
+  if (files) {
+    long count = d->get_stringarray_size(files);
+    for (int i = 0; i < count; i++) {
+      const char *f = d->get_stringarray_item(files, i);
+      appjson *obj = d->json_create_object();
+      d->json_add_string_to_object(obj, "file", f);
+
+      // Calc SHA
+      char *fp = d->concat_path(target_dir, f);
+      long fsize = 0;
+      appbool is_bin = app_false;
+      const unsigned char *fc = d->read_any(fp, &fsize, &is_bin);
+      if (fc) {
+        char *sha = d->get_sha256(fc, fsize);
+        d->json_add_string_to_object(obj, "sha", sha);
+        d->json_free_string(sha);
+        d->free((void *)fc);
+      }
+      d->free(fp);
+
+      d->json_add_item_to_array(arr, obj);
+    }
+    d->delete_stringarray(files);
+  }
+  d->free(target_dir);
+
+  const appserverresponse *resp = d->send_json(arr, 200);
+  d->json_delete(arr);
+  return resp;
+}
+
+const appserverresponse *router(appdeps *d, void *props) {
+  const char *route = d->get_server_route(d->appserverrequest);
+  const char *method = d->get_server_method(d->appserverrequest);
+
+  if (d->strcmp(route, "/") == 0 && d->strcmp(method, "GET") == 0) {
+    return handle_home(d, d->appserverrequest);
+  }
+
+  if (d->strcmp(route, "/database_file") == 0 &&
+      d->strcmp(method, "GET") == 0) {
+    return handle_database_file(d, d->appserverrequest);
+  }
+
+  if (d->strcmp(route, "/list_articles") == 0 &&
+      d->strcmp(method, "GET") == 0) {
+    return handle_list_articles(d, d->appserverrequest);
+  }
+
+  if (d->strcmp(route, "/article") == 0 && d->strcmp(method, "GET") == 0) {
+    return handle_article(d, d->appserverrequest);
+  }
+
+  if (d->strcmp(route, "/author") == 0 && d->strcmp(method, "GET") == 0) {
+    return handle_author(d, d->appserverrequest);
+  }
+
+  if (d->strcmp(route, "/about") == 0 && d->strcmp(method, "GET") == 0) {
+    return handle_about(d, d->appserverrequest);
+  }
+
+  // API
+  if (d->strncmp(route, "/api/", 5) == 0 && d->strcmp(method, "POST") == 0) {
+    if (d->strcmp(route, "/api/write_database_file") == 0)
+      return handle_api_write_file(d, d->appserverrequest);
+    if (d->strcmp(route, "/api/read_database_file") == 0)
+      return handle_api_read_file(d, d->appserverrequest);
+    if (d->strcmp(route, "/api/delete_database_file") == 0)
+      return handle_api_delete_file(d, d->appserverrequest);
+    if (d->strcmp(route, "/api/list_database_files_recursively") == 0)
+      return handle_api_list_files(d, d->appserverrequest);
+  }
+
+  return d->send_text("Not Found", "text/plain", 404);
+}
+
+// ===============================MAIN==========================================
+int appmain(appdeps *d) {
+  const char *PORT_FLAGS[] = {"port", "p"};
+  const char *DB_FLAGS[] = {"database_path", "db"};
+  const char *PASS_FLAGS[] = {"root_password", "pass"};
+
+  // Parse Port
+  const char *start_port = d->get_arg_flag_value(
+      d->argv, PORT_FLAGS, sizeof(PORT_FLAGS) / sizeof(PORT_FLAGS[0]), 0);
+  global_config.port = 8080;
+  if (start_port) {
+    global_config.port = d->atoi(start_port);
+  }
+
+  // Parse Database Path
+  const char *db_path = d->get_arg_flag_value(
+      d->argv, DB_FLAGS, sizeof(DB_FLAGS) / sizeof(DB_FLAGS[0]), 0);
+  if (db_path) {
+    global_config.database_path = d->strdup(db_path);
+  } else {
+    global_config.database_path = d->strdup("database");
+  }
+
+  // Parse Root Password
+  const char *root_pass = d->get_arg_flag_value(
+      d->argv, PASS_FLAGS, sizeof(PASS_FLAGS) / sizeof(PASS_FLAGS[0]), 0);
+  if (root_pass) {
+    global_config.root_password = d->strdup(root_pass);
+  } else {
+    global_config.root_password = d->strdup("admin"); // Default
+  }
+
+  d->printf("Starting VibeLog on port %d\n", global_config.port);
+  d->printf("Database path: %s\n", global_config.database_path);
+
+  d->start_server(global_config.port, router, app_null, app_false);
+
+  // Cleanup (though typically unreachable in this loop)
+  d->free((void *)global_config.database_path);
+  d->free((void *)global_config.root_password);
+
   return 0;
+}
+
+// ===============================HELPERS IMPL==================================
+const char *get_mime_type(appdeps *d, const char *path) {
+  if (d->strstr(path, ".html"))
+    return "text/html; charset=utf-8";
+  if (d->strstr(path, ".css"))
+    return "text/css";
+  if (d->strstr(path, ".js"))
+    return "application/javascript";
+  if (d->strstr(path, ".json"))
+    return "application/json";
+  if (d->strstr(path, ".png"))
+    return "image/png";
+  if (d->strstr(path, ".jpg") || d->strstr(path, ".jpeg"))
+    return "image/jpeg";
+  if (d->strstr(path, ".gif"))
+    return "image/gif";
+  if (d->strstr(path, ".webp"))
+    return "image/webp";
+  return "application/octet-stream";
+}
+
+void load_global_data(appdeps *d) {
+  if (cached_categories == app_null) {
+    char *path = d->concat_path(global_config.database_path, "categorys.json");
+    if (d->file_exists(path)) {
+      cached_categories = d->json_parse_file(path);
+    } else {
+      // Fallback empty array
+      cached_categories = d->json_create_array();
+    }
+    d->free(path);
+  }
+}
+
+char *render_page(appdeps *d, const char *title, const char *content) {
+  appctext *t = d->new_ctext(app_null);
+
+  // HEAD
+  d->ctext_append(t, "<!DOCTYPE html><html lang='en'><head>");
+  d->ctext_append(t, "<meta charset='UTF-8'><meta name='viewport' "
+                     "content='width=device-width, initial-scale=1.0'>");
+  d->ctext_append(t, "<title>");
+  if (title) {
+    d->ctext_append(t, title);
+    d->ctext_append(t, " - ");
+  }
+  d->ctext_append(t, "VibeLog</title>");
+
+  // Fonts
+  d->ctext_append(
+      t, "<link rel='preconnect' href='https://fonts.googleapis.com'>");
+  d->ctext_append(
+      t,
+      "<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>");
+  d->ctext_append(
+      t, "<link "
+         "href='https://fonts.googleapis.com/"
+         "css2?family=IBM+Plex+Sans:wght@400;600&family=Inter:wght@400;500;600&"
+         "family=JetBrains+Mono:wght@400;500&display=swap' rel='stylesheet'>");
+
+  // CSS
+  d->ctext_append(
+      t, "<link rel='stylesheet' href='/database_file?path=style.css'>");
+  d->ctext_append(t, "</head><body>");
+
+  // NAVBAR
+  d->ctext_append(t,
+                  "<nav class='navbar'><div class='container navbar-content'>");
+  d->ctext_append(t, "<a href='/' class='logo'>VIBELOG_</a>");
+
+  d->ctext_append(t, "<div class='nav-links'>");
+
+  // Dynamic Navbar items
+  if (cached_categories && d->json_is_array(cached_categories)) {
+    int count = d->json_get_array_size(cached_categories);
+    for (int i = 0; i < count; i++) {
+      appjson *item = d->json_get_array_item(cached_categories, i);
+      appjson *nav = d->json_get_object_item(item, "navbar");
+      if (nav && d->json_is_true(nav)) {
+        const char *name =
+            d->json_get_string_value(d->json_get_object_item(item, "name"));
+        if (name) {
+          d->ctext_append(t,
+                          "<a href='/list_articles?page=1&limit=10&category=");
+          d->ctext_append(t, name);
+          d->ctext_append(t, "' class='nav-link'>");
+          d->ctext_append(t, name);
+          d->ctext_append(t, "</a>");
+        }
+      }
+    }
+  }
+
+  // Categories Dropdown
+  d->ctext_append(t, "<div class='dropdown'><button class='btn'>Categories "
+                     "▾</button><div class='dropdown-content'>");
+  if (cached_categories && d->json_is_array(cached_categories)) {
+    int count = d->json_get_array_size(cached_categories);
+    for (int i = 0; i < count; i++) {
+      appjson *item = d->json_get_array_item(cached_categories, i);
+      const char *name =
+          d->json_get_string_value(d->json_get_object_item(item, "name"));
+      const char *desc = d->json_get_string_value(
+          d->json_get_object_item(item, "description"));
+
+      d->ctext_append(t, "<a href='/list_articles?page=1&limit=10&category=");
+      d->ctext_append(t, name);
+      d->ctext_append(t, "' title='");
+      if (desc)
+        d->ctext_append(t, desc);
+      d->ctext_append(t, "'>");
+      d->ctext_append(t, name);
+      d->ctext_append(t, "</a>");
+    }
+  }
+  d->ctext_append(t, "</div></div>"); // Close content, close dropdown
+
+  d->ctext_append(t, "</div>"); // Close nav-links
+
+  // Search
+  d->ctext_append(
+      t, "<form action='/list_articles' method='GET' class='search-form'>");
+  d->ctext_append(t, "<input type='text' name='search' placeholder='Search...' "
+                     "class='search-input'>");
+  d->ctext_append(t, "</form>");
+
+  d->ctext_append(t, "</div></nav>"); // Close container, close nav
+
+  // MAIN LAYOUT
+  d->ctext_append(t, "<div class='container main-layout'>");
+
+  // Content Column
+  d->ctext_append(t, "<main class='content-column'>");
+  d->ctext_append(t, content);
+  d->ctext_append(t, "</main>");
+
+  // Sidebar Column
+  d->ctext_append(t, "<aside class='sidebar-column'>");
+
+  // Stats Block
+  d->ctext_append(t, "<div class='sidebar-section'>");
+  d->ctext_append(t, "<h3 class='sidebar-title'>Network Status</h3>");
+  // TODO: Dynamic stats
+  d->ctext_append(t, "<div class='stat-item'><span class='stat-label'>Total "
+                     "Views</span><span class='stat-value'>8,942</span></div>");
+  d->ctext_append(t, "<div class='stat-item'><span class='stat-label'>System "
+                     "Load</span><span class='stat-value'>0.04%</span></div>");
+  d->ctext_append(t, "</div>");
+
+  // Categories Stats
+  d->ctext_append(t, "<div class='sidebar-section'>");
+  d->ctext_append(t, "<h3 class='sidebar-title'>Traffic / Sector</h3>");
+  d->ctext_append(
+      t, "<div class='stat-item'><span class='stat-label'>Lua</span><span "
+         "class='stat-value'>42%</span></div>");
+  d->ctext_append(
+      t, "<div class='stat-item'><span class='stat-label'>C</span><span "
+         "class='stat-value'>35%</span></div>");
+  d->ctext_append(
+      t,
+      "<div class='stat-item'><span class='stat-label'>Vibecoding</span><span "
+      "class='stat-value'>23%</span></div>");
+  d->ctext_append(t, "</div>");
+
+  d->ctext_append(t, "</aside>");
+
+  d->ctext_append(t, "</div>"); // Close main-layout
+
+  // Footer
+  d->ctext_append(t, "<footer class='footer'><div class='container'>");
+  d->ctext_append(t, "VIBELOG SYSTEM © 2026 // NO RIGHTS RESERVED");
+  d->ctext_append(t, "</div></footer>");
+
+  d->ctext_append(t, "</body></html>");
+
+  char *res = d->strdup(d->ctext_get_text(t));
+  d->ctext_free(t);
+  return res;
+}
+
+long parse_date_to_ts(appdeps *d, const char *date) {
+  // DD-MM-YYYY -> YYYYMMDD
+  if (d->strlen(date) != 10)
+    return 0;
+  // Simple manual parsing
+  char year[5] = {0};
+  char month[3] = {0};
+  char day[3] = {0};
+
+  day[0] = date[0];
+  day[1] = date[1];
+  month[0] = date[3];
+  month[1] = date[4];
+  year[0] = date[6];
+  year[1] = date[7];
+  year[2] = date[8];
+  year[3] = date[9];
+
+  char buf[20];
+  d->sprintf(buf, "%s%s%s", year, month, day);
+  return d->atoi(buf);
+}
+
+appjson *load_articles(appdeps *d, int page, int limit, const char *category,
+                       const char *search, const char *author_id) {
+  appjson *results = d->json_create_array();
+
+  // 1. List Dates (database/articles/DD-MM-YYYY)
+  char *articles_root = d->concat_path(global_config.database_path, "articles");
+  appstringarray *dates = d->list_dirs(articles_root);
+  d->free(articles_root);
+
+  if (!dates)
+    return results;
+
+  long dates_count = d->get_stringarray_size(dates);
+
+  // Temporary storage for sorting
+  // Since we don't have a dynamic array struct, we will use appjson to store
+  // them and then sort
+  appjson *all_articles = d->json_create_array();
+
+  for (int i = 0; i < dates_count; i++) {
+    const char *date_str = d->get_stringarray_item(dates, i);
+    long ts = parse_date_to_ts(d, date_str);
+
+    // List Articles in that date
+    char *date_path = d->concat_path(global_config.database_path, "articles");
+    char *tmp = d->concat_path(date_path, date_str);
+    d->free(date_path);
+    date_path = tmp;
+
+    appstringarray *article_ids = d->list_dirs(date_path);
+    if (article_ids) {
+      long arts_count = d->get_stringarray_size(article_ids);
+      for (int j = 0; j < arts_count; j++) {
+        const char *aid = d->get_stringarray_item(article_ids, j);
+
+        // Load data.json
+        char *art_path = d->concat_path(date_path, aid);
+        char *json_path = d->concat_path(art_path, "data.json");
+
+        if (d->file_exists(json_path)) {
+          appjson *data = d->json_parse_file(json_path);
+          if (data) {
+            d->json_add_string_to_object(data, "date", date_str);
+            d->json_add_string_to_object(data, "id", aid);
+            d->json_add_number_to_object(
+                data, "ts", (double)ts); // Add timestamp for sorting
+
+            // Filter logic
+            appbool match = app_true;
+
+            if (author_id) {
+              const char *aid_json = d->json_get_string_value(
+                  d->json_get_object_item(data, "author_id"));
+              if (!aid_json || d->strcmp(aid_json, author_id) != 0) {
+                match = app_false;
+              }
+            }
+
+            if (match && category) {
+              appjson *cats = d->json_get_object_item(data, "categories");
+              appbool cat_found = app_false;
+              if (cats && d->json_is_array(cats)) {
+                int c_size = d->json_get_array_size(cats);
+                for (int c = 0; c < c_size; c++) {
+                  const char *cname =
+                      d->json_get_string_value(d->json_get_array_item(cats, c));
+                  if (cname && d->strcmp(cname, category) == 0) {
+                    cat_found = app_true;
+                    break;
+                  }
+                }
+              }
+              if (!cat_found)
+                match = app_false;
+            }
+
+            if (search && match) {
+              // Simple substring search
+              const char *t = d->json_get_string_value(
+                  d->json_get_object_item(data, "title"));
+              const char *s = d->json_get_string_value(
+                  d->json_get_object_item(data, "summary"));
+              if ((!t || !d->strstr(t, search)) &&
+                  (!s || !d->strstr(s, search))) {
+                match = app_false;
+              }
+            }
+
+            if (match) {
+              d->json_add_item_to_array(all_articles, data);
+            } else {
+              d->json_delete(data);
+            }
+          }
+        }
+        d->free(art_path);
+        d->free(json_path);
+      }
+      d->delete_stringarray(article_ids);
+    }
+    d->free(date_path);
+  }
+  d->delete_stringarray(dates);
+
+  // SORTING (Bubble Sort on appjson array by 'ts' desc)
+  int total = d->json_get_array_size(all_articles);
+  for (int i = 0; i < total - 1; i++) {
+    for (int j = 0; j < total - i - 1; j++) {
+      appjson *a = d->json_get_array_item(all_articles, j);
+      appjson *b = d->json_get_array_item(all_articles, j + 1);
+      double tsa = d->json_get_number_value(d->json_get_object_item(a, "ts"));
+      double tsb = d->json_get_number_value(d->json_get_object_item(b, "ts"));
+
+      if (tsa < tsb) { // Descending
+        appjson *a_clone = d->json_duplicate(a, app_true);
+        appjson *b_clone = d->json_duplicate(b, app_true);
+        d->json_replace_item_in_array(all_articles, j, b_clone);
+        d->json_replace_item_in_array(all_articles, j + 1, a_clone);
+      }
+    }
+  }
+
+  // Pagination
+  int start = (page - 1) * limit;
+  int end = start + limit;
+  if (start >= total) {
+    d->json_delete(all_articles);
+    return results;
+  }
+
+  for (int i = start; i < end && i < total; i++) {
+    appjson *item = d->json_get_array_item(all_articles, i);
+    d->json_add_item_to_array(results, d->json_duplicate(item, app_true));
+  }
+
+  d->json_delete(all_articles);
+  return results;
+}
+
+// ===============================METRICS & DATA================================
+appjson *load_author(appdeps *d, const char *author_id) {
+  char *path = d->concat_path(global_config.database_path, "authors");
+  char *tmp = d->concat_path(path, author_id);
+  d->free(path);
+  path = d->concat_path(tmp, "data.json");
+  d->free(tmp);
+
+  appjson *data = app_null;
+  if (d->file_exists(path)) {
+    data = d->json_parse_file(path);
+  }
+  d->free(path);
+  return data;
+}
+
+void record_view(appdeps *d, const char *date, const char *id) {
+  // 1. Setup paths
+  char *metrics_root = d->concat_path(global_config.database_path, "metrics");
+  char *art_metrics = d->concat_path(metrics_root, "articles");
+  d->free(metrics_root);
+
+  char *date_dir = d->concat_path(art_metrics, date);
+  d->free(art_metrics);
+
+  char *id_dir = d->concat_path(date_dir, id);
+  d->free(date_dir);
+
+  if (!d->dir_exists(id_dir)) {
+    d->create_dir(id_dir);
+  }
+
+  // 2. Atomic Total Views Update
+  char *total_views_path = d->concat_path(id_dir, "total_views.json");
+  appjson *totals = app_null;
+
+  if (d->file_exists(total_views_path)) {
+    totals = d->json_parse_file(total_views_path);
+  }
+
+  if (!totals) {
+    totals = d->json_create_object();
+    d->json_add_number_to_object(totals, "views", 0);
+  }
+
+  appjson *v_item = d->json_get_object_item(totals, "views");
+  double v = d->json_get_number_value(v_item);
+  d->json_replace_item_in_object(totals, "views", d->json_create_number(v + 1));
+
+  char *tmp_path = d->concat_path(id_dir, "total_views.json.tmp");
+  d->json_save_file(totals, tmp_path);
+  d->move_any(tmp_path, total_views_path); // Rename/Move is atomic on POSIX
+
+  d->free(tmp_path);
+  d->free(total_views_path);
+  d->json_delete(totals);
+
+  // 3. Individual View Record
+  char *views_dir = d->concat_path(id_dir, "views");
+  if (!d->dir_exists(views_dir))
+    d->create_dir(views_dir);
+
+  long now = d->get_unix_time();
+  char date_buf[64];
+  d->get_formatted_time(now, date_buf, 64, "%d-%m-%Y");
+
+  char day_dir_name[128];
+  d->sprintf(day_dir_name, "%s:%ld", date_buf, now); // Just use current TS
+
+  char *day_path = d->concat_path(views_dir, day_dir_name);
+  if (!d->dir_exists(day_path))
+    d->create_dir(day_path);
+
+  // View File
+  appjson *view = d->json_create_object();
+  char iso_buf[64];
+  d->get_formatted_time(now, iso_buf, 64, "%Y-%m-%dT%H:%M:%SZ");
+  d->json_add_string_to_object(view, "date", iso_buf);
+  d->json_add_string_to_object(view, "country", "unknown");
+  d->json_add_string_to_object(view, "device", "unknown");
+  d->json_add_number_to_object(view, "duration", 0);
+
+  int rnd = d->get_random();
+  char fname[64];
+  d->sprintf(fname, "view_%ld_%d.json", now, rnd);
+
+  char *view_path = d->concat_path(day_path, fname);
+  d->json_save_file(view, view_path);
+
+  d->free(view_path);
+  d->json_delete(view);
+  d->free(day_path);
+  d->free(views_dir);
+  d->free(id_dir);
 }
