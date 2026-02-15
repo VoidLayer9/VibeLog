@@ -46,3 +46,11 @@ int wrapper_strncmp(const char *s1, const char *s2, unsigned long n) {
 int wrapper_memcmp(const void *s1, const void *s2, unsigned long n) {
   return memcmp(s1, s2, (size_t)n);
 }
+
+char *wrapper_strcpy(char *dst, const char *src) {
+  return strcpy(dst, src);
+}
+
+char *wrapper_strcat(char *dst, const char *src) {
+  return strcat(dst, src);
+}

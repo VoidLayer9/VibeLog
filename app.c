@@ -34,14 +34,14 @@ struct appdeps {
   int (*snprintf)(char *str, unsigned long size, const char *format, ...);
 
   unsigned long (*strlen)(const char *s);
-  char *(*strcpy)(char *dst, const char *src);
-  char *(*strcat)(char *dst, const char *src);
+  char *(*custom_strcpy)(char *dst, const char *src);
+  char *(*custom_strcat)(char *dst, const char *src);
   int (*strcmp)(const char *s1, const char *s2);
   int (*strncmp)(const char *s1, const char *s2, unsigned long n);
   char *(*strstr)(const char *haystack, const char *needle);
   char *(*strdup)(const char *s);
-  void *(*memcpy)(void *dst, const void *src, unsigned long n);
-  void *(*memset)(void *s, int c, unsigned long n);
+  void *(*custom_memcpy)(void *dst, const void *src, unsigned long n);
+  void *(*custom_memset)(void *s, int c, unsigned long n);
   int (*memcmp)(const void *s1, const void *s2, unsigned long n);
 
   //======================CONVERSION
@@ -1072,12 +1072,12 @@ int appmain(appdeps *d) {
     // Manual URL construction
     int len = d->strlen(url_base) + d->strlen("api/write_database_file") + 2;
     full_url = d->malloc(len);
-    d->memset(full_url, 0, len);
-    d->strcpy(full_url, url_base);
+    d->custom_memset(full_url, 0, len);
+    d->custom_strcpy(full_url, url_base);
     if (full_url[d->strlen(full_url) - 1] != '/') {
-      d->strcat(full_url, "/");
+      d->custom_strcat(full_url, "/");
     }
-    d->strcat(full_url, "api/write_database_file");
+    d->custom_strcat(full_url, "api/write_database_file");
 
     d->printf("Uploading %s to %s...\n", path, full_url);
 
@@ -1119,7 +1119,7 @@ int appmain(appdeps *d) {
       unsigned char *rbody = d->appclientresponse_read_body(resp, &rsize);
       if (rbody) {
         char *rstr = d->malloc(rsize + 1);
-        d->memcpy(rstr, rbody, rsize);
+        d->custom_memcpy(rstr, rbody, rsize);
         rstr[rsize] = 0;
         d->printf("Response: %s\n", rstr);
         d->free(rstr);
@@ -1157,12 +1157,12 @@ int appmain(appdeps *d) {
     // URL
     int len = d->strlen(url_base) + d->strlen("api/read_database_file") + 2;
     char *full_url = d->malloc(len);
-    d->memset(full_url, 0, len);
-    d->strcpy(full_url, url_base);
+    d->custom_memset(full_url, 0, len);
+    d->custom_strcpy(full_url, url_base);
     if (full_url[d->strlen(full_url) - 1] != '/') {
-      d->strcat(full_url, "/");
+      d->custom_strcat(full_url, "/");
     }
-    d->strcat(full_url, "api/read_database_file");
+    d->custom_strcat(full_url, "api/read_database_file");
 
     d->printf("Downloading %s from %s...\n", path, full_url);
 

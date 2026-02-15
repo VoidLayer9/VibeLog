@@ -240,7 +240,11 @@ void *wrapper_memset(void *s, int c, unsigned long n) ;
 
 int wrapper_strncmp(const char *s1, const char *s2, unsigned long n) ;
 
-int wrapper_memcmp(const void *s1, const void *s2, unsigned long n) ;//fdefine.text_stack.c
+int wrapper_memcmp(const void *s1, const void *s2, unsigned long n) ;
+
+char *wrapper_strcpy(char *dst, const char *src) ;
+
+char *wrapper_strcat(char *dst, const char *src) ;//fdefine.text_stack.c
 
 
 void *wrapper_new_text_stack(const char *text) ;
