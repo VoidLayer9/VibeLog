@@ -612,107 +612,25 @@ const appserverresponse *handle_database_file(appdeps *d,
   return resp;
 }
 
-const appserverresponse *handle_home(appdeps *d, const appserverrequest *req) {
-  load_global_data(d);
+// Shared helper to render article list with pagination
+const appserverresponse *
+render_article_list_response(appdeps *d, const char *title, int page, int limit,
+                             const char *category, const char *search) {
 
-  appjson *articles = load_articles(d, 1, 5, app_null, app_null, app_null);
-
-  appctext *t = d->new_ctext(app_null);
-
-  if (d->json_get_array_size(articles) == 0) {
-    d->ctext_append(t, "<div class='card'><div class='card-title'>No articles "
-                       "found</div></div>");
-  } else {
-    int count = d->json_get_array_size(articles);
-    for (int i = 0; i < count; i++) {
-      appjson *art = d->json_get_array_item(articles, i);
-      const char *title =
-          d->json_get_string_value(d->json_get_object_item(art, "title"));
-      const char *summary =
-          d->json_get_string_value(d->json_get_object_item(art, "summary"));
-      const char *date =
-          d->json_get_string_value(d->json_get_object_item(art, "date"));
-      const char *id =
-          d->json_get_string_value(d->json_get_object_item(art, "id"));
-
-      const char *thumbnail =
-          d->json_get_string_value(d->json_get_object_item(art, "thumbnail"));
-
-      d->ctext_append(t, "<div class='card'>");
-      if (thumbnail) {
-        d->ctext_append(
-            t,
-            "<div class='card-image'><img src='/database_file?path=articles/");
-        d->ctext_append(t, date);
-        d->ctext_append(t, "/");
-        d->ctext_append(t, id);
-        d->ctext_append(t, "/");
-        d->ctext_append(t, thumbnail);
-        d->ctext_append(
-            t, "' style='width:100%; height:200px; object-fit:cover;' alt='");
-        d->ctext_append(t, title);
-        d->ctext_append(t, "'></div>");
-      } else {
-        d->ctext_append(t, "<div class='card-image'></div>");
-      }
-      d->ctext_append(t, "<h2 class='card-title'><a href='/article?date=");
-      d->ctext_append(t, date);
-      d->ctext_append(t, "&id=");
-      d->ctext_append(t, id);
-      d->ctext_append(t, "'>");
-      d->ctext_append(t, title);
-      d->ctext_append(t, "</a></h2>");
-
-      d->ctext_append(t, "<div class='card-meta'><span>");
-      d->ctext_append(t, date);
-      d->ctext_append(t, "</span></div>");
-
-      d->ctext_append(t, "<div class='card-summary'>");
-      d->ctext_append(t, summary);
-      d->ctext_append(t, "</div>");
-
-      d->ctext_append(t, "</div>");
-    }
-  }
-
-  d->json_delete(articles);
-
-  char *full_html = render_page(d, "Home", d->ctext_get_text(t));
-  d->ctext_free(t);
-
-  const appserverresponse *resp = d->send_text(full_html, "text/html", 200);
-  d->free(full_html);
-  return resp;
-}
-
-const appserverresponse *handle_list_articles(appdeps *d,
-                                              const appserverrequest *req) {
-  load_global_data(d);
-
-  // Parse Params
-  const char *page_str = d->get_server_query_param(req, "page");
-  const char *limit_str = d->get_server_query_param(req, "limit");
-  const char *category = d->get_server_query_param(req, "category");
-  const char *search = d->get_server_query_param(req, "search");
-
-  int page = 1;
-  if (page_str)
-    page = d->atoi(page_str);
-  if (page < 1)
-    page = 1;
-
-  int limit = 10;
-  if (limit_str)
-    limit = d->atoi(limit_str);
-  if (limit < 1)
-    limit = 10;
+  // Cap limit just in case
   if (limit > 50)
     limit = 50;
+  if (limit < 1)
+    limit = 10;
+  if (page < 1)
+    page = 1;
 
   appjson *articles = load_articles(d, page, limit, category, search, app_null);
 
   appctext *t = d->new_ctext(app_null);
-  d->ctext_append(t, "<h1>Articles</h1>");
+  d->ctext_append(t, "<h1>");
+  d->ctext_append(t, title);
+  d->ctext_append(t, "</h1>");
 
   // Filter info
   if (category || search) {
@@ -739,7 +657,7 @@ const appserverresponse *handle_list_articles(appdeps *d,
     int count = d->json_get_array_size(articles);
     for (int i = 0; i < count; i++) {
       appjson *art = d->json_get_array_item(articles, i);
-      const char *title =
+      const char *title_json =
           d->json_get_string_value(d->json_get_object_item(art, "title"));
       const char *summary =
           d->json_get_string_value(d->json_get_object_item(art, "summary"));
@@ -763,7 +681,7 @@ const appserverresponse *handle_list_articles(appdeps *d,
         d->ctext_append(t, thumbnail);
         d->ctext_append(
             t, "' style='width:100%; height:200px; object-fit:cover;' alt='");
-        d->ctext_append(t, title);
+        d->ctext_append(t, title_json);
         d->ctext_append(t, "'></div>");
       } else {
         d->ctext_append(t, "<div class='card-image'></div>");
@@ -773,7 +691,7 @@ const appserverresponse *handle_list_articles(appdeps *d,
       d->ctext_append(t, "&id=");
       d->ctext_append(t, id);
       d->ctext_append(t, "'>");
-      d->ctext_append(t, title);
+      d->ctext_append(t, title_json);
       d->ctext_append(t, "</a></h2>");
 
       d->ctext_append(t, "<div class='card-meta'><span>");
@@ -835,11 +753,46 @@ const appserverresponse *handle_list_articles(appdeps *d,
 
   d->json_delete(articles);
 
-  char *full_html = render_page(d, "Articles", d->ctext_get_text(t));
+  char *full_html = render_page(d, title, d->ctext_get_text(t));
   d->ctext_free(t);
   const appserverresponse *resp = d->send_text(full_html, "text/html", 200);
   d->free(full_html);
   return resp;
+}
+
+const appserverresponse *handle_home(appdeps *d, const appserverrequest *req) {
+  load_global_data(d);
+  // Home behaves like list_articles with default params (page=1, limit=10)
+  return render_article_list_response(d, "Latest Articles", 1, 10, app_null,
+                                      app_null);
+}
+
+const appserverresponse *handle_list_articles(appdeps *d,
+                                              const appserverrequest *req) {
+  load_global_data(d);
+
+  // Parse Params
+  const char *page_str = d->get_server_query_param(req, "page");
+  const char *limit_str = d->get_server_query_param(req, "limit");
+  const char *category = d->get_server_query_param(req, "category");
+  const char *search = d->get_server_query_param(req, "search");
+
+  int page = 1;
+  if (page_str)
+    page = d->atoi(page_str);
+  if (page < 1)
+    page = 1;
+
+  int limit = 10;
+  if (limit_str)
+    limit = d->atoi(limit_str);
+  if (limit < 1)
+    limit = 10;
+  if (limit > 50)
+    limit = 50;
+
+  return render_article_list_response(d, "Articles", page, limit, category,
+                                      search);
 }
 
 // =======================MANAGEMENT API========================================
