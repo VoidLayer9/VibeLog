@@ -12,3 +12,4 @@ dependencies
 test_local_db
 a.out
 database/metrics
+CORTEX.md
