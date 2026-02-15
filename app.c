@@ -253,10 +253,11 @@ struct appdeps {
 
   appclientresponse *(*appclientrequest_fetch)(
       appclientrequest *appclientrequest);
-  unsigned char *(*appclientresponse_read_body)(
+
+  const unsigned char *(*appclientresponse_read_body)(
       appclientresponse *appclientresponse, long *size);
   long (*appclientresponse_get_body_size)(appclientresponse *appclientresponse);
-  char *(*appclientresponse_get_header_value_by_key)(
+  const char *(*appclientresponse_get_header_value_by_key)(
       appclientresponse *appclientresponse, const char *key);
   const char *(*appclientresponse_get_header_key_by_index)(
       appclientresponse *appclientresponse, int index);
