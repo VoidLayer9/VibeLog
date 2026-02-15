@@ -1208,8 +1208,32 @@ void perform_download_sync(appdeps *d, const char *local_path,
     }
   }
 
-  d->printf("Sync Complete. Downloaded: %d, Skipped: %d\n", downloaded,
-            skipped);
+  // DELETION LOGIC (Download Algorithm: Local Delete)
+  int deleted = 0;
+  for (int i = 0; i < d->json_get_array_size(local_list); i++) {
+    appjson *l_item = d->json_get_array_item(local_list, i);
+    const char *f =
+        d->json_get_string_value(d->json_get_object_item(l_item, "file"));
+
+    // Skip hidden files or cache (should already be filtered by
+    // get_local_file_list mostly, but safe to check)
+    if (d->strstr(f, ".vibelog_cache") || d->strstr(f, ".DS_Store")) {
+      continue;
+    }
+
+    appjson *r_item = find_file_obj(d, remote_list, f);
+    if (!r_item) {
+      // File exists locally but not remotely -> Delete it
+      d->printf("Deleting local file %s (not on server)...\n", f);
+      char *full_path = d->concat_path(local_path, f);
+      d->delete_any(full_path);
+      d->free(full_path);
+      deleted++;
+    }
+  }
+
+  d->printf("Sync Complete. Downloaded: %d, Skipped: %d, Deleted: %d\n",
+            downloaded, skipped, deleted);
   d->json_delete(remote_list);
   d->json_delete(local_list);
 }
@@ -1312,7 +1336,59 @@ void perform_upload_sync(appdeps *d, const char *local_path,
     }
   }
 
-  d->printf("Sync Complete. Uploaded: %d, Skipped: %d\n", uploaded, skipped);
+  // DELETION LOGIC (Upload Algorithm: Remote Delete)
+  int deleted = 0;
+  for (int i = 0; i < d->json_get_array_size(remote_list); i++) {
+    appjson *r_item = d->json_get_array_item(remote_list, i);
+    const char *f =
+        d->json_get_string_value(d->json_get_object_item(r_item, "file"));
+
+    // Skip special/hidden files if they appear in valid lists
+    if (d->strstr(f, ".vibelog_cache") || d->strstr(f, ".DS_Store")) {
+      continue;
+    }
+
+    appjson *l_item = find_file_obj(d, local_list, f);
+    if (!l_item) {
+      // File exists remotely but not locally -> Delete it from server
+      d->printf("Deleting remote file %s (not on local)...\n", f);
+
+      // Prepare delete URL
+      // POST /api/delete_database_file
+      int len = d->strlen(url_base) + d->strlen("api/delete_database_file") + 2;
+      char *del_url = d->malloc(len);
+      d->custom_memset(del_url, 0, len);
+      d->custom_strcpy(del_url, url_base);
+      if (d->strlen(del_url) > 0 && del_url[d->strlen(del_url) - 1] != '/') {
+        d->custom_strcat(del_url, "/");
+      }
+      d->custom_strcat(del_url, "api/delete_database_file");
+
+      appclientrequest *req = d->newappclientrequest(del_url);
+      d->appclientrequest_set_method(req, "POST");
+      d->appclientrequest_set_header(req, "root-password", pass);
+      d->appclientrequest_set_header(req, "path", f);
+
+      appclientresponse *resp = d->appclientrequest_fetch(req);
+      if (resp) {
+        int status = d->appclientresponse_get_status_code(resp);
+        if (status == 200) {
+          deleted++;
+        } else {
+          d->printf("Error: Failed to delete remote file %s. Status: %d\n", f,
+                    status);
+        }
+        d->free_clientresponse(resp);
+      } else {
+        d->printf("Error: Failed connection for delete %s\n", f);
+      }
+      d->appclientrequest_free(req);
+      d->free(del_url);
+    }
+  }
+
+  d->printf("Sync Complete. Uploaded: %d, Skipped: %d, Deleted (Remote): %d\n",
+            uploaded, skipped, deleted);
   d->json_delete(remote_list);
   d->json_delete(local_list);
 }
