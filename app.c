@@ -327,6 +327,7 @@ typedef struct {
   const char *database_path;
   const char *root_password;
   int port;
+  const char *cache_dir;
 } VibeLogConfig;
 
 VibeLogConfig global_config = {0};
@@ -1020,7 +1021,9 @@ appjson *fetch_remote_file_list(appdeps *d, const char *url_base,
 }
 
 // Get local file list with SHAs
-appjson *get_local_file_list(appdeps *d, const char *base_path) {
+// Get local file list with SHAs
+appjson *get_local_file_list(appdeps *d, const char *base_path,
+                             const char *cache_dir) {
   appstringarray *files = d->list_files_recursively(base_path);
   appjson *arr = d->json_create_array();
 
@@ -1039,8 +1042,8 @@ appjson *get_local_file_list(appdeps *d, const char *base_path) {
     // Or in the base_path's parent?
     // Let's use a fixed cache dir relative to base_path for now:
     // base_path/.vibelog_cache Actually the tool
-    // d->get_cached_file_sha(cache_dir, filepath)
-    char *cache_dir = d->concat_path(base_path, ".vibelog_cache");
+    // char *sha = d->get_cached_file_sha(cache_dir, filepath)
+    // char *cache_dir = d->concat_path(base_path, ".vibelog_cache");
 
     // We shouldn't list files inside .vibelog_cache though.
     // list_files_recursively might include them if not careful.
@@ -1049,7 +1052,7 @@ appjson *get_local_file_list(appdeps *d, const char *base_path) {
 
     if (d->strstr(f, ".vibelog_cache")) {
       d->free(full_path);
-      d->free(cache_dir);
+      // d->free(cache_dir); // cache_dir is passed in now, don't free it here
       d->json_delete(obj);
       continue;
     }
@@ -1066,7 +1069,7 @@ appjson *get_local_file_list(appdeps *d, const char *base_path) {
 
     d->json_add_item_to_array(arr, obj);
 
-    d->free(cache_dir);
+    // d->free(cache_dir);
     d->free(full_path);
   }
   d->delete_stringarray(files);
@@ -1090,8 +1093,10 @@ appjson *find_file_obj(appdeps *d, appjson *arr, const char *filepath) {
 }
 
 // DOWNLOAD SYNC
+// DOWNLOAD SYNC
 void perform_download_sync(appdeps *d, const char *local_path,
-                           const char *url_base, const char *pass) {
+                           const char *url_base, const char *pass,
+                           const char *cache_dir) {
   d->printf("Fetching remote file list...\n");
   appjson *remote_list = fetch_remote_file_list(d, url_base, pass);
   if (!remote_list) {
@@ -1100,7 +1105,7 @@ void perform_download_sync(appdeps *d, const char *local_path,
   }
 
   d->printf("Scanning local files...\n");
-  appjson *local_list = get_local_file_list(d, local_path);
+  appjson *local_list = get_local_file_list(d, local_path, cache_dir);
 
   int count = d->json_get_array_size(remote_list);
   d->printf("Found %d remote files. Synchronizing...\n", count);
@@ -1178,8 +1183,10 @@ void perform_download_sync(appdeps *d, const char *local_path,
 }
 
 // UPLOAD SYNC
+// UPLOAD SYNC
 void perform_upload_sync(appdeps *d, const char *local_path,
-                         const char *url_base, const char *pass) {
+                         const char *url_base, const char *pass,
+                         const char *cache_dir) {
   d->printf("Fetching remote file list...\n");
   appjson *remote_list = fetch_remote_file_list(d, url_base, pass);
   if (!remote_list) {
@@ -1188,7 +1195,7 @@ void perform_upload_sync(appdeps *d, const char *local_path,
   }
 
   d->printf("Scanning local files...\n");
-  appjson *local_list = get_local_file_list(d, local_path);
+  appjson *local_list = get_local_file_list(d, local_path, cache_dir);
 
   int count = d->json_get_array_size(local_list);
   d->printf("Found %d local files. Synchronizing...\n", count);
@@ -1278,6 +1285,7 @@ int appmain(appdeps *d) {
   const char *PASS_FLAGS[] = {"root_password", "pass"};
   const char *URL_FLAGS[] = {"url", "u"};
   const char *PATH_FLAGS[] = {"path", "f"};
+  const char *CACHE_FLAGS[] = {"cache_dir", "c"};
 
   // Server Flags
   const char *PORT_FLAGS[] = {"port", "p"};
@@ -1300,9 +1308,9 @@ int appmain(appdeps *d) {
     d->printf("  start     Start the server (requires --database_path and "
               "--root_password)\n");
     d->printf("  upload    Upload a file (requires --path, --url, "
-              "--root_password)\n");
+              "--root_password, optional --cache_dir)\n");
     d->printf("  download  Download a file (requires --path, --url, "
-              "--root_password)\n");
+              "--root_password, optional --cache_dir)\n");
     return 1;
   }
 
@@ -1376,7 +1384,16 @@ int appmain(appdeps *d) {
       return 1;
     }
 
-    perform_upload_sync(d, db_path, url_base, pass);
+    const char *cache_val = d->get_arg_flag_value(
+        d->argv, CACHE_FLAGS, sizeof(CACHE_FLAGS) / sizeof(CACHE_FLAGS[0]), 0);
+    if (cache_val) {
+      global_config.cache_dir = d->strdup(cache_val);
+    } else {
+      global_config.cache_dir = d->strdup(".vibelog_cache");
+    }
+
+    perform_upload_sync(d, db_path, url_base, pass, global_config.cache_dir);
+    d->free((void *)global_config.cache_dir); // Cleanup
     return 0;
   }
 
@@ -1406,7 +1423,16 @@ int appmain(appdeps *d) {
       d->create_dir(db_path);
     }
 
-    perform_download_sync(d, db_path, url_base, pass);
+    const char *cache_val = d->get_arg_flag_value(
+        d->argv, CACHE_FLAGS, sizeof(CACHE_FLAGS) / sizeof(CACHE_FLAGS[0]), 0);
+    if (cache_val) {
+      global_config.cache_dir = d->strdup(cache_val);
+    } else {
+      global_config.cache_dir = d->strdup(".vibelog_cache");
+    }
+
+    perform_download_sync(d, db_path, url_base, pass, global_config.cache_dir);
+    d->free((void *)global_config.cache_dir); // Cleanup
     return 0;
   }
 
