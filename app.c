@@ -813,7 +813,8 @@ appbool check_auth(appdeps *d, const appserverrequest *req) {
 const appserverresponse *handle_api_write_file(appdeps *d,
                                                const appserverrequest *req) {
   if (!check_auth(d, req))
-    return d->send_text("Unauthorized", "text/plain", 401);
+    return d->send_text("Unauthorized: Invalid root_password", "text/plain",
+                        401);
 
   const char *path = d->get_server_header(req, "path");
   if (!path)
@@ -836,7 +837,8 @@ const appserverresponse *handle_api_write_file(appdeps *d,
 const appserverresponse *handle_api_read_file(appdeps *d,
                                               const appserverrequest *req) {
   if (!check_auth(d, req))
-    return d->send_text("Unauthorized", "text/plain", 401);
+    return d->send_text("Unauthorized: Invalid root_password", "text/plain",
+                        401);
 
   const char *path = d->get_server_header(req, "path");
   if (!path)
@@ -860,7 +862,8 @@ const appserverresponse *handle_api_read_file(appdeps *d,
 const appserverresponse *handle_api_delete_file(appdeps *d,
                                                 const appserverrequest *req) {
   if (!check_auth(d, req))
-    return d->send_text("Unauthorized", "text/plain", 401);
+    return d->send_text("Unauthorized: Invalid root_password", "text/plain",
+                        401);
 
   const char *path = d->get_server_header(req, "path");
   if (!path)
@@ -878,7 +881,8 @@ const appserverresponse *handle_api_delete_file(appdeps *d,
 const appserverresponse *handle_api_list_files(appdeps *d,
                                                const appserverrequest *req) {
   if (!check_auth(d, req))
-    return d->send_text("Unauthorized", "text/plain", 401);
+    return d->send_text("Unauthorized: Invalid root_password", "text/plain",
+                        401);
 
   const char *rel_path = d->get_server_header(req, "path");
   char *target_dir = app_null;
@@ -1003,16 +1007,32 @@ appjson *fetch_remote_file_list(appdeps *d, const char *url_base,
   appjson *result = app_null;
 
   if (resp) {
-    long rsize = 0;
-    const unsigned char *rbody = d->appclientresponse_read_body(resp, &rsize);
-    if (rbody) {
-      char *rstr = d->malloc(rsize + 1);
-      d->custom_memcpy(rstr, rbody, rsize);
-      rstr[rsize] = 0;
-      result = d->json_parse(rstr);
-      d->free(rstr);
+    int status = d->appclientresponse_get_status_code(resp);
+    if (status == 200) {
+      long rsize = 0;
+      const unsigned char *rbody = d->appclientresponse_read_body(resp, &rsize);
+      if (rbody) {
+        char *rstr = d->malloc(rsize + 1);
+        d->custom_memcpy(rstr, rbody, rsize);
+        rstr[rsize] = 0;
+        result = d->json_parse(rstr);
+        d->free(rstr);
+      }
+    } else if (status == 401) {
+      d->printf(
+          "Error: Authentication failed. Please check your --root_password.\n");
+    } else if (status == 403) {
+      d->printf("Error: Access denied (403).\n");
+    } else if (status == 404) {
+      d->printf("Error: Remote endpoint not found (404). Check your --url.\n");
+    } else {
+      d->printf("Error: Server returned status %d.\n", status);
     }
     d->free_clientresponse(resp);
+  } else {
+    d->printf("Error: Could not connect to remote server at %s. Check your "
+              "--url or network connection.\n",
+              full_url);
   }
 
   d->appclientrequest_free(req);
@@ -1153,20 +1173,27 @@ void perform_download_sync(appdeps *d, const char *local_path,
 
       appclientresponse *resp = d->appclientrequest_fetch(req);
       if (resp) {
-        long rsize = 0;
-        const unsigned char *rbody =
-            d->appclientresponse_read_body(resp, &rsize);
-        if (rbody) { // Check if we actually got content
-          char *save_path = d->concat_path(local_path, f);
-          d->write_any(save_path, rbody, rsize);
-          d->free(save_path);
-          downloaded++;
+        int status = d->appclientresponse_get_status_code(resp);
+        if (status == 200) {
+          long rsize = 0;
+          const unsigned char *rbody =
+              d->appclientresponse_read_body(resp, &rsize);
+          if (rbody) { // Check if we actually got content
+            char *save_path = d->concat_path(local_path, f);
+            d->write_any(save_path, rbody, rsize);
+            d->free(save_path);
+            downloaded++;
+          } else {
+            d->printf("Empty response for %s\n", f);
+          }
         } else {
-          d->printf("Empty response for %s\n", f);
+          d->printf(
+              "Error: Failed to download %s. Server returned status %d.\n", f,
+              status);
         }
         d->free_clientresponse(resp);
       } else {
-        d->printf("Failed query for %s\n", f);
+        d->printf("Error: Failed connection for %s\n", f);
       }
       d->appclientrequest_free(req);
       d->free(d_url);
@@ -1256,11 +1283,18 @@ void perform_upload_sync(appdeps *d, const char *local_path,
 
         appclientresponse *resp = d->appclientrequest_fetch(req);
         if (resp) {
-          // assume success if response
+          int status = d->appclientresponse_get_status_code(resp);
+          if (status == 200) {
+            // assume success if response
+            uploaded++;
+          } else {
+            d->printf(
+                "Error: Failed to upload %s. Server returned status %d.\n", f,
+                status);
+          }
           d->free_clientresponse(resp);
-          uploaded++;
         } else {
-          d->printf("Failed upload for %s\n", f);
+          d->printf("Error: Failed connection for upload %s\n", f);
         }
         d->appclientrequest_free(req);
         d->free((void *)content); // cast to void* for free
