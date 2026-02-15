@@ -32,7 +32,7 @@ Download the latest pre-compiled version for your platform from the [Releases pa
 2. **Compile**
    Use standard GCC or Clang:
    ```bash
-   gcc app.c -o vibelog
+   gcc main.c -o vibelog
    ```
 
    **Advanced Builds:**
