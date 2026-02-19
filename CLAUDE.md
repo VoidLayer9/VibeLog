@@ -54,11 +54,13 @@ Default server port is 8080 if not specified.
 database/
 ├── categorys.json              # Global category definitions
 ├── articles/                   # Article content by date
-│   └── DD-MM-YYYY/
-│       └── <article_id>/
-│           ├── data.json       # Metadata (title, author, etc.)
-│           ├── content/en.html # Article body
-│           └── assets/thumbnail.jpg
+│   └── YYYY/
+│       └── MM/
+│           └── DD/
+│               └── <article_id>/
+│                   ├── data.json       # Metadata (title, author, etc.)
+│                   ├── content/en.html # Article body
+│                   └── assets/thumbnail.jpg
 ├── authors/                    # Author profiles
 │   └── <author_id>/
 │       ├── data.json          # Profile info
@@ -80,12 +82,12 @@ database/
 - `app.c` must never use `#include` — all functionality comes through the `appdeps` function pointer table
 - When modifying `app.c`, always return the full file content including the type definitions and comments at the top  
 - `main.c` wires the `appdeps` struct to actual library implementations; changes here affect the entire sandbox API surface
-- VibeLog expects strict database folder structure — articles must be organized by date (DD-MM-YYYY)
+- VibeLog expects strict database folder structure — articles must be organized by date (YYYY/MM/DD)
 - All JSON files must be valid and follow the expected schema (see README.md for examples)
 
 ## VibeLog-Specific Development Notes
 
-- Articles are accessed via routes like `/article/DD-MM-YYYY/article_id`
+- Articles are accessed via routes like `/article?date=YYYY/MM/DD&id=article_id`
 - Categories can be toggled for navbar display via `categorys.json`
 - Metrics are automatically tracked per article and category
 - The CLI supports synchronization between local and remote instances
