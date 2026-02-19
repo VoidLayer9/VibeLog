@@ -108,7 +108,7 @@ Manage specific resources using dedicated commands. All commands require `--url`
 ## Creating Content
 
 ### 1. Articles
-Articles are stored in `database/articles/DD-MM-YYYY/<article_id>/`.
+Articles are stored in `database/articles/YYYY/MM/DD/<article_id>/`.
 
 **Structure:**
 *   `data.json`: Metadata (title, summary, tags).
@@ -169,11 +169,13 @@ database/
 │   ├── style.css           # Global styles
 │   └── about.html          # About page content
 ├── articles/               # Article content
-│   └── DD-MM-YYYY/
-│       └── <article_id>/
-│           ├── data.json
-│           ├── content/en.html
-│           └── assets/thumbnail.jpg
+│   └── YYYY/
+│       └── MM/
+│           └── DD/
+│               └── <article_id>/
+│                   ├── data.json
+│                   ├── content/en.html
+│                   └── assets/thumbnail.jpg
 ├── authors/                # Author profiles
 │   └── <author_id>/
 │       ├── data.json

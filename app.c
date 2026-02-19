@@ -1858,31 +1858,33 @@ char *render_page(appdeps *d, const char *title, const char *content) {
   return res;
 }
 
+void strip_trailing_slash(appdeps *d, char *dst, const char *src) {
+  int len = d->strlen(src);
+  while (len > 0 && src[len - 1] == '/') len--;
+  d->custom_memcpy(dst, src, len);
+  dst[len] = '\0';
+}
+
 long parse_date_to_ts(appdeps *d, const char *date) {
-  // DD-MM-YYYY -> YYYYMMDD
-  // Handle dates with trailing slashes like "04-02-2026/"
+  // YYYY/MM/DD -> YYYYMMDD
   int len = d->strlen(date);
-  
+
   if (len < 10)
     return 0;
-  
-  // Check if it's a valid date format (either "DD-MM-YYYY" or "DD-MM-YYYY/")
-  if (len != 10 && len != 11)
-    return 0;
-  
-  // Simple manual parsing
+
+  // Simple manual parsing for "YYYY/MM/DD"
   char year[5] = {0};
   char month[3] = {0};
   char day[3] = {0};
 
-  day[0] = date[0];
-  day[1] = date[1];
-  month[0] = date[3];
-  month[1] = date[4];
-  year[0] = date[6];
-  year[1] = date[7];
-  year[2] = date[8];
-  year[3] = date[9];
+  year[0] = date[0];
+  year[1] = date[1];
+  year[2] = date[2];
+  year[3] = date[3];
+  month[0] = date[5];
+  month[1] = date[6];
+  day[0] = date[8];
+  day[1] = date[9];
 
   char buf[20];
   d->custom_sprintf(buf, "%s%s%s", year, month, day);
@@ -1893,105 +1895,136 @@ appjson *load_articles(appdeps *d, int page, int limit, const char *category,
                        const char *search, const char *author_id) {
   appjson *results = d->json_create_array();
 
-  // 1. List Dates (database/articles/DD-MM-YYYY)
+  // 1. List Years (database/articles/YYYY)
   char *articles_root = d->concat_path(global_config.database_path, "articles");
-  appstringarray *dates = d->list_dirs(articles_root);
-  d->free(articles_root);
+  appstringarray *years = d->list_dirs(articles_root);
 
-  if (!dates)
+  if (!years) {
+    d->free(articles_root);
     return results;
+  }
 
-  long dates_count = d->get_stringarray_size(dates);
+  long years_count = d->get_stringarray_size(years);
 
   // Temporary storage for sorting
-  // Since we don't have a dynamic array struct, we will use appjson to store
-  // them and then sort
   appjson *all_articles = d->json_create_array();
 
-  for (int i = 0; i < dates_count; i++) {
-    const char *date_str = d->get_stringarray_item(dates, i);
-    long ts = parse_date_to_ts(d, date_str);
+  for (int yi = 0; yi < years_count; yi++) {
+    const char *year_str = d->get_stringarray_item(years, yi);
+    char *year_path = d->concat_path(articles_root, year_str);
 
-    // List Articles in that date
-    char *date_path = d->concat_path(global_config.database_path, "articles");
-    char *tmp = d->concat_path(date_path, date_str);
-    d->free(date_path);
-    date_path = tmp;
+    appstringarray *months = d->list_dirs(year_path);
+    if (!months) {
+      d->free(year_path);
+      continue;
+    }
 
-    appstringarray *article_ids = d->list_dirs(date_path);
-    if (article_ids) {
-      long arts_count = d->get_stringarray_size(article_ids);
-      for (int j = 0; j < arts_count; j++) {
-        const char *aid = d->get_stringarray_item(article_ids, j);
+    long months_count = d->get_stringarray_size(months);
+    for (int mi = 0; mi < months_count; mi++) {
+      const char *month_str = d->get_stringarray_item(months, mi);
+      char *month_path = d->concat_path(year_path, month_str);
 
-        // Load data.json
-        char *art_path = d->concat_path(date_path, aid);
-        char *json_path = d->concat_path(art_path, "data.json");
+      appstringarray *days = d->list_dirs(month_path);
+      if (!days) {
+        d->free(month_path);
+        continue;
+      }
 
-        if (d->file_exists(json_path)) {
-          appjson *data = d->json_parse_file(json_path);
-          if (data) {
-            d->json_add_string_to_object(data, "date", date_str);
-            d->json_add_string_to_object(data, "id", aid);
-            d->json_add_number_to_object(
-                data, "ts", (double)ts); // Add timestamp for sorting
+      long days_count = d->get_stringarray_size(days);
+      for (int di = 0; di < days_count; di++) {
+        const char *day_str = d->get_stringarray_item(days, di);
+        char *day_path = d->concat_path(month_path, day_str);
 
-            // Filter logic
-            appbool match = app_true;
+        // Build date string as "YYYY/MM/DD"
+        char y[8], m[4], dd[4];
+        strip_trailing_slash(d, y, year_str);
+        strip_trailing_slash(d, m, month_str);
+        strip_trailing_slash(d, dd, day_str);
+        char date_str[16];
+        d->custom_sprintf(date_str, "%s/%s/%s", y, m, dd);
+        long ts = parse_date_to_ts(d, date_str);
 
-            if (author_id) {
-              const char *aid_json = d->json_get_string_value(
-                  d->json_get_object_item(data, "author_id"));
-              if (!aid_json || d->strcmp(aid_json, author_id) != 0) {
-                match = app_false;
-              }
-            }
+        appstringarray *article_ids = d->list_dirs(day_path);
+        if (article_ids) {
+          long arts_count = d->get_stringarray_size(article_ids);
+          for (int j = 0; j < arts_count; j++) {
+            const char *aid = d->get_stringarray_item(article_ids, j);
 
-            if (match && category) {
-              appjson *cats = d->json_get_object_item(data, "categories");
-              appbool cat_found = app_false;
-              if (cats && d->json_is_array(cats)) {
-                int c_size = d->json_get_array_size(cats);
-                for (int c = 0; c < c_size; c++) {
-                  const char *cname =
-                      d->json_get_string_value(d->json_get_array_item(cats, c));
-                  if (cname && d->strcmp(cname, category) == 0) {
-                    cat_found = app_true;
-                    break;
+            // Load data.json
+            char *art_path = d->concat_path(day_path, aid);
+            char *json_path = d->concat_path(art_path, "data.json");
+
+            if (d->file_exists(json_path)) {
+              appjson *data = d->json_parse_file(json_path);
+              if (data) {
+                d->json_add_string_to_object(data, "date", date_str);
+                d->json_add_string_to_object(data, "id", aid);
+                d->json_add_number_to_object(
+                    data, "ts", (double)ts); // Add timestamp for sorting
+
+                // Filter logic
+                appbool match = app_true;
+
+                if (author_id) {
+                  const char *aid_json = d->json_get_string_value(
+                      d->json_get_object_item(data, "author_id"));
+                  if (!aid_json || d->strcmp(aid_json, author_id) != 0) {
+                    match = app_false;
                   }
                 }
-              }
-              if (!cat_found)
-                match = app_false;
-            }
 
-            if (search && match) {
-              // Simple substring search
-              const char *t = d->json_get_string_value(
-                  d->json_get_object_item(data, "title"));
-              const char *s = d->json_get_string_value(
-                  d->json_get_object_item(data, "summary"));
-              if ((!t || !d->strstr(t, search)) &&
-                  (!s || !d->strstr(s, search))) {
-                match = app_false;
+                if (match && category) {
+                  appjson *cats = d->json_get_object_item(data, "categories");
+                  appbool cat_found = app_false;
+                  if (cats && d->json_is_array(cats)) {
+                    int c_size = d->json_get_array_size(cats);
+                    for (int c = 0; c < c_size; c++) {
+                      const char *cname = d->json_get_string_value(
+                          d->json_get_array_item(cats, c));
+                      if (cname && d->strcmp(cname, category) == 0) {
+                        cat_found = app_true;
+                        break;
+                      }
+                    }
+                  }
+                  if (!cat_found)
+                    match = app_false;
+                }
+
+                if (search && match) {
+                  // Simple substring search
+                  const char *t = d->json_get_string_value(
+                      d->json_get_object_item(data, "title"));
+                  const char *s = d->json_get_string_value(
+                      d->json_get_object_item(data, "summary"));
+                  if ((!t || !d->strstr(t, search)) &&
+                      (!s || !d->strstr(s, search))) {
+                    match = app_false;
+                  }
+                }
+
+                if (match) {
+                  d->json_add_item_to_array(all_articles, data);
+                } else {
+                  d->json_delete(data);
+                }
               }
             }
-
-            if (match) {
-              d->json_add_item_to_array(all_articles, data);
-            } else {
-              d->json_delete(data);
-            }
+            d->free(art_path);
+            d->free(json_path);
           }
+          d->delete_stringarray(article_ids);
         }
-        d->free(art_path);
-        d->free(json_path);
+        d->free(day_path);
       }
-      d->delete_stringarray(article_ids);
+      d->delete_stringarray(days);
+      d->free(month_path);
     }
-    d->free(date_path);
+    d->delete_stringarray(months);
+    d->free(year_path);
   }
-  d->delete_stringarray(dates);
+  d->delete_stringarray(years);
+  d->free(articles_root);
 
   // SORTING (Bubble Sort on appjson array by 'ts' desc - newest first)
   int total = d->json_get_array_size(all_articles);
@@ -2039,19 +2072,16 @@ appjson *calculate_stats(appdeps *d) {
   appjson *cats = d->json_create_array(); // Array of {name, views}
   d->json_add_item_to_object(stats, "categories", cats);
 
-  // Iterate all articles
+  // Iterate all articles (YYYY/MM/DD structure)
   char *articles_root = d->concat_path(global_config.database_path, "articles");
-  d->printf("Debug: Articles root: %s\n", articles_root);
-  appstringarray *dates = d->list_dirs(articles_root);
-  d->free(articles_root);
+  appstringarray *years = d->list_dirs(articles_root);
 
-  if (!dates) {
-    d->printf("Debug: No dates found\n");
+  if (!years) {
+    d->free(articles_root);
     return stats;
   }
 
-  long dates_count = d->get_stringarray_size(dates);
-  d->printf("Debug: Dates count: %ld\n", dates_count);
+  long years_count = d->get_stringarray_size(years);
   double total_views = 0;
 
   // Add Page Views
@@ -2085,102 +2115,131 @@ appjson *calculate_stats(appdeps *d) {
   }
   d->free(pages_metrics);
 
-  for (int i = 0; i < dates_count; i++) {
-    const char *date_str = d->get_stringarray_item(dates, i);
-    char *date_path = d->concat_path(global_config.database_path, "articles");
-    char *tmp = d->concat_path(date_path, date_str);
-    d->free(date_path);
-    date_path = tmp;
+  for (int yi = 0; yi < years_count; yi++) {
+    const char *year_str = d->get_stringarray_item(years, yi);
+    char *year_path = d->concat_path(articles_root, year_str);
 
-    appstringarray *article_ids = d->list_dirs(date_path);
-    if (article_ids) {
-      long arts_count = d->get_stringarray_size(article_ids);
-      d->printf("Debug: Date %s has %ld articles\n", date_str, arts_count);
-      for (int j = 0; j < arts_count; j++) {
-        const char *aid = d->get_stringarray_item(article_ids, j);
+    appstringarray *months = d->list_dirs(year_path);
+    if (!months) {
+      d->free(year_path);
+      continue;
+    }
 
-        // 1. Get Categories
-        char *art_path = d->concat_path(date_path, aid);
-        char *json_path = d->concat_path(art_path, "data.json");
+    long months_count = d->get_stringarray_size(months);
+    for (int mi = 0; mi < months_count; mi++) {
+      const char *month_str = d->get_stringarray_item(months, mi);
+      char *month_path = d->concat_path(year_path, month_str);
 
-        appjson *art_data = app_null;
-        if (d->file_exists(json_path)) {
-          art_data = d->json_parse_file(json_path);
-        }
-        d->free(json_path);
+      appstringarray *days = d->list_dirs(month_path);
+      if (!days) {
+        d->free(month_path);
+        continue;
+      }
 
-        // 2. Get Views
-        char *metrics_root =
-            d->concat_path(global_config.database_path, "metrics");
-        char *art_metrics = d->concat_path(metrics_root, "articles");
-        d->free(metrics_root);
-        char *m_date_dir = d->concat_path(art_metrics, date_str);
-        d->free(art_metrics);
-        char *m_id_dir = d->concat_path(m_date_dir, aid);
-        d->free(m_date_dir);
-        char *views_file = d->concat_path(m_id_dir, "total_views.json");
-        d->free(m_id_dir);
+      long days_count = d->get_stringarray_size(days);
+      for (int di = 0; di < days_count; di++) {
+        const char *day_str = d->get_stringarray_item(days, di);
+        char *day_path = d->concat_path(month_path, day_str);
 
-        double views = 0;
-        if (d->file_exists(views_file)) {
-          d->printf("Debug: Found views file: %s\n", views_file);
-          appjson *v_json = d->json_parse_file(views_file);
-          if (v_json) {
-            views = d->json_get_number_value(
-                d->json_get_object_item(v_json, "views"));
-            d->printf("Debug: Views: %f\n", views);
-            d->json_delete(v_json);
-          }
-        } else {
-          d->printf("Debug: Views file not found: %s\n", views_file);
-        }
-        d->free(views_file);
+        // Build date string as "YYYY/MM/DD"
+        char y[8], m[4], dd[4];
+        strip_trailing_slash(d, y, year_str);
+        strip_trailing_slash(d, m, month_str);
+        strip_trailing_slash(d, dd, day_str);
+        char date_str[16];
+        d->custom_sprintf(date_str, "%s/%s/%s", y, m, dd);
 
-        total_views += views;
+        appstringarray *article_ids = d->list_dirs(day_path);
+        if (article_ids) {
+          long arts_count = d->get_stringarray_size(article_ids);
+          for (int j = 0; j < arts_count; j++) {
+            const char *aid = d->get_stringarray_item(article_ids, j);
 
-        // Aggregate Categories (Linear Scan on Array)
-        if (art_data) {
-          appjson *c_arr = d->json_get_object_item(art_data, "categories");
-          if (c_arr && d->json_is_array(c_arr)) {
-            int c_count = d->json_get_array_size(c_arr);
-            for (int k = 0; k < c_count; k++) {
-              const char *cname =
-                  d->json_get_string_value(d->json_get_array_item(c_arr, k));
-              if (cname) {
-                // Find in cats array
-                appbool found = app_false;
-                int cats_len = d->json_get_array_size(cats);
-                for (int m = 0; m < cats_len; m++) {
-                  appjson *cat_obj = d->json_get_array_item(cats, m);
-                  const char *ex_name = d->json_get_string_value(
-                      d->json_get_object_item(cat_obj, "name"));
-                  if (ex_name && d->strcmp(ex_name, cname) == 0) {
-                    double cv = d->json_get_number_value(
-                        d->json_get_object_item(cat_obj, "views"));
-                    d->json_replace_item_in_object(
-                        cat_obj, "views", d->json_create_number(cv + views));
-                    found = app_true;
-                    break;
-                  }
-                }
-                if (!found) {
-                  appjson *new_cat = d->json_create_object();
-                  d->json_add_string_to_object(new_cat, "name", cname);
-                  d->json_add_number_to_object(new_cat, "views", views);
-                  d->json_add_item_to_array(cats, new_cat);
-                }
+            // 1. Get Categories
+            char *art_path = d->concat_path(day_path, aid);
+            char *json_path = d->concat_path(art_path, "data.json");
+
+            appjson *art_data = app_null;
+            if (d->file_exists(json_path)) {
+              art_data = d->json_parse_file(json_path);
+            }
+            d->free(json_path);
+
+            // 2. Get Views
+            char *mr = d->concat_path(global_config.database_path, "metrics");
+            char *art_metrics = d->concat_path(mr, "articles");
+            d->free(mr);
+            char *m_date_dir = d->concat_path(art_metrics, date_str);
+            d->free(art_metrics);
+            char *m_id_dir = d->concat_path(m_date_dir, aid);
+            d->free(m_date_dir);
+            char *views_file = d->concat_path(m_id_dir, "total_views.json");
+            d->free(m_id_dir);
+
+            double views = 0;
+            if (d->file_exists(views_file)) {
+              appjson *v_json = d->json_parse_file(views_file);
+              if (v_json) {
+                views = d->json_get_number_value(
+                    d->json_get_object_item(v_json, "views"));
+                d->json_delete(v_json);
               }
             }
+            d->free(views_file);
+
+            total_views += views;
+
+            // Aggregate Categories (Linear Scan on Array)
+            if (art_data) {
+              appjson *c_arr = d->json_get_object_item(art_data, "categories");
+              if (c_arr && d->json_is_array(c_arr)) {
+                int c_count = d->json_get_array_size(c_arr);
+                for (int k = 0; k < c_count; k++) {
+                  const char *cname = d->json_get_string_value(
+                      d->json_get_array_item(c_arr, k));
+                  if (cname) {
+                    // Find in cats array
+                    appbool found = app_false;
+                    int cats_len = d->json_get_array_size(cats);
+                    for (int m = 0; m < cats_len; m++) {
+                      appjson *cat_obj = d->json_get_array_item(cats, m);
+                      const char *ex_name = d->json_get_string_value(
+                          d->json_get_object_item(cat_obj, "name"));
+                      if (ex_name && d->strcmp(ex_name, cname) == 0) {
+                        double cv = d->json_get_number_value(
+                            d->json_get_object_item(cat_obj, "views"));
+                        d->json_replace_item_in_object(
+                            cat_obj, "views",
+                            d->json_create_number(cv + views));
+                        found = app_true;
+                        break;
+                      }
+                    }
+                    if (!found) {
+                      appjson *new_cat = d->json_create_object();
+                      d->json_add_string_to_object(new_cat, "name", cname);
+                      d->json_add_number_to_object(new_cat, "views", views);
+                      d->json_add_item_to_array(cats, new_cat);
+                    }
+                  }
+                }
+              }
+              d->json_delete(art_data);
+            }
+            d->free(art_path);
           }
-          d->json_delete(art_data);
+          d->delete_stringarray(article_ids);
         }
-        d->free(art_path);
+        d->free(day_path);
       }
-      d->delete_stringarray(article_ids);
+      d->delete_stringarray(days);
+      d->free(month_path);
     }
-    d->free(date_path);
+    d->delete_stringarray(months);
+    d->free(year_path);
   }
-  d->delete_stringarray(dates);
+  d->delete_stringarray(years);
+  d->free(articles_root);
 
   d->json_replace_item_in_object(stats, "total_views",
                                  d->json_create_number(total_views));
@@ -2250,7 +2309,7 @@ void record_view(appdeps *d, const char *date, const char *id) {
 
   long now = d->get_unix_time();
   char date_buf[64];
-  d->get_formatted_time(now, date_buf, 64, "%d-%m-%Y");
+  d->get_formatted_time(now, date_buf, 64, "%Y/%m/%d");
 
   char day_dir_name[128];
   d->custom_sprintf(day_dir_name, "%s:%ld", date_buf,
@@ -2332,7 +2391,7 @@ void record_page_view(appdeps *d, const char *page_id, int chunk, int size,
 
   long now = d->get_unix_time();
   char date_buf[64];
-  d->get_formatted_time(now, date_buf, 64, "%d-%m-%Y");
+  d->get_formatted_time(now, date_buf, 64, "%Y/%m/%d");
 
   char day_dir_name[128];
   d->custom_sprintf(day_dir_name, "%s:%ld", date_buf, now);
