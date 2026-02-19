@@ -1858,6 +1858,13 @@ char *render_page(appdeps *d, const char *title, const char *content) {
   return res;
 }
 
+void strip_trailing_slash(appdeps *d, char *dst, const char *src) {
+  int len = d->strlen(src);
+  while (len > 0 && src[len - 1] == '/') len--;
+  d->custom_memcpy(dst, src, len);
+  dst[len] = '\0';
+}
+
 long parse_date_to_ts(appdeps *d, const char *date) {
   // YYYY/MM/DD -> YYYYMMDD
   int len = d->strlen(date);
@@ -1929,8 +1936,12 @@ appjson *load_articles(appdeps *d, int page, int limit, const char *category,
         char *day_path = d->concat_path(month_path, day_str);
 
         // Build date string as "YYYY/MM/DD"
+        char y[8], m[4], dd[4];
+        strip_trailing_slash(d, y, year_str);
+        strip_trailing_slash(d, m, month_str);
+        strip_trailing_slash(d, dd, day_str);
         char date_str[16];
-        d->custom_sprintf(date_str, "%s/%s/%s", year_str, month_str, day_str);
+        d->custom_sprintf(date_str, "%s/%s/%s", y, m, dd);
         long ts = parse_date_to_ts(d, date_str);
 
         appstringarray *article_ids = d->list_dirs(day_path);
@@ -2131,8 +2142,12 @@ appjson *calculate_stats(appdeps *d) {
         char *day_path = d->concat_path(month_path, day_str);
 
         // Build date string as "YYYY/MM/DD"
+        char y[8], m[4], dd[4];
+        strip_trailing_slash(d, y, year_str);
+        strip_trailing_slash(d, m, month_str);
+        strip_trailing_slash(d, dd, day_str);
         char date_str[16];
-        d->custom_sprintf(date_str, "%s/%s/%s", year_str, month_str, day_str);
+        d->custom_sprintf(date_str, "%s/%s/%s", y, m, dd);
 
         appstringarray *article_ids = d->list_dirs(day_path);
         if (article_ids) {
