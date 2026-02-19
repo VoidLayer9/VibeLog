@@ -1,13 +1,8 @@
-adapte o banco de dados para o seguinte formato:
-atualmente o banco tem o formato: 
-~~~txt 
-database/articles/dd-mm-yyyy
-~~~
-e deve ter o formato
-~~~txt 
-database/articles/yyyy/mm/dd
-~~~
-onde ano será uma pasta, mes será uma pasta e dia será uma pasta.
-para isso siga esse passos:
+implemente um mecanismo que aceita markdown na criação de artigos.
 
-3 - leia o README.md e adapte a documentação.
+implemente no seguinte formato: 
+~~~bash
+vibelog start --port  3000 --database-path test --root-password teste --markdown-converter-command  'command --o #OUT#'
+~~~
+aonde deve ser executado o commando dando um replace no #OUT# pelo caminho do arquivo que deve ser gerado. 
+use um mecanismo de cacheamento baseado em sha256 para converter o arquivo de markdown para html para evitar reprocessamento.
