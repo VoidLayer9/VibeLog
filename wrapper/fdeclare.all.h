@@ -2,6 +2,39 @@
 //mannaged by silver chain: https://github.com/OUIsolutions/SilverChain
 #include "imports/imports.dep_declare.h"
 //silver_chain_scope_end
+//fdefine.https_client.c
+
+
+void *wrapper_newhttpclient(const char *url) ;
+void wrapper_httpclient_set_method(void *client, const char *method) ;
+void wrapper_httpclient_set_max_redirections(void *client,
+                                             int max_redirections) ;
+void *wrapper_httpclient_fetch(void *client) ;
+int wrapper_httpclient_response_get_status_code(void *response) ;
+
+const unsigned char *wrapper_httpclient_response_read_body(void *response,
+                                                           long *size) ;
+long wrapper_httpclient_response_get_body_size(void *response) ;
+
+int wrapper_httpclient_response_get_header_size(void *response) ;
+void wrapper_httpclient_set_header(void *client, const char *key,
+                                   const char *value) ;
+void wrapper_httpclient_set_body(void *client, unsigned char *content,
+                                 long size) ;
+void wrapper_httpclient_free(void *client) ;
+
+const char *
+wrapper_httpclient_response_get_header_value_by_key(void *response,
+                                                    const char *key) ;
+const char *wrapper_httpclient_response_get_header_key_by_index(void *response,
+                                                                int index) ;
+const char *
+wrapper_httpclient_response_get_header_value_by_index(void *response,
+                                                      int index) ;
+
+void wrapper_httpclient_response_free(void *response) ;
+
+int wrapper_httpclient_response_get_header_count(void *response) ;
 //fdefine.json.c
 void *wrapper_json_parse(const char *value);
 
@@ -102,94 +135,7 @@ void *wrapper_json_get_next(const void *item);
 const char *wrapper_json_get_key(const void *item);
 
 int wrapper_json_get_object_size(const void *object);
-//fdefine.asssets.c
-
-const unsigned char *wrapper_get_asset_content(const char *path,long *size,int *is_binary);
-void *wrapper_list_assets(const char *path);
-//fdefine.https_client.c
-
-
-void *wrapper_newhttpclient(const char *url) ;
-void wrapper_httpclient_set_method(void *client, const char *method) ;
-void wrapper_httpclient_set_max_redirections(void *client,
-                                             int max_redirections) ;
-void *wrapper_httpclient_fetch(void *client) ;
-int wrapper_httpclient_response_get_status_code(void *response) ;
-
-const unsigned char *wrapper_httpclient_response_read_body(void *response,
-                                                           long *size) ;
-long wrapper_httpclient_response_get_body_size(void *response) ;
-
-int wrapper_httpclient_response_get_header_size(void *response) ;
-void wrapper_httpclient_set_header(void *client, const char *key,
-                                   const char *value) ;
-void wrapper_httpclient_set_body(void *client, unsigned char *content,
-                                 long size) ;
-void wrapper_httpclient_free(void *client) ;
-
-const char *
-wrapper_httpclient_response_get_header_value_by_key(void *response,
-                                                    const char *key) ;
-const char *wrapper_httpclient_response_get_header_key_by_index(void *response,
-                                                                int index) ;
-const char *
-wrapper_httpclient_response_get_header_value_by_index(void *response,
-                                                      int index) ;
-
-void wrapper_httpclient_response_free(void *response) ;
-
-int wrapper_httpclient_response_get_header_count(void *response) ;
-//fdefine.time.c
-
-#include <time.h>
-
-long wrapper_get_unix_time(void) ;
-
-int wrapper_get_random(void) ;
-
-void wrapper_get_formatted_time(long timestamp, char *buf, int buf_size, const char *fmt) ;
-//fdefine.io.c
-unsigned char *wrapper_read_any(const char *path, long *size, int *is_binary);
-char *wrapper_read_string(const char *path);
-void wrapper_write_any(const char *path, const unsigned char *content, long size);
-
-void wrapper_write_string(const char *path, const char *content);
-void wrapper_delete_any(const char *path);
-void wrapper_create_dir(const char *path);
-
-int wrapper_file_exists(const char *path);
-int wrapper_dir_exists(const char *path);
-
-int wrapper_copy_any(const char *src, const char *dst);
-
-int wrapper_move_any(const char *src, const char *dst);
-
-void wrapper_append_string(const char *path, const char *content);
-
-char *wrapper_concat_path(const char *path1, const char *path2);
-
-void wrapper_delete_stringarray(void *array);
-long wrapper_get_stringarray_size(void *array);
-const char *wrapper_get_stringarray_item(void *array, int index);
-
-void *wrapper_list_files(const char *path);
-void *wrapper_list_dirs(const char *path);
-void *wrapper_list_any(const char *path);
-void *wrapper_list_files_recursively(const char *path);
-void *wrapper_list_dirs_recursively(const char *path);
-void *wrapper_list_any_recursively(const char *path);
-char *wrapper_generate_sha(const unsigned char *data, long size);
-
-char * wrapper_generate_cached_sha_from_file(const char *cache_path,const char *path);//fdefine.argv.c
-
-const char *wrapper_get_arg_value(const void *argv,int index);
-int wrapper_get_arg_count(const void *argv);
-
-const char *wrapper_get_arg_flag_value(const void *argv,const char **flags,int total_flags,int index);
-
-int wrapper_get_arg_flag_count(const void *argv,const char **flags,int total_flags);
-
-appbool wrapper_has_arg_flag(const void *argv,const char **flags,int total_flags);//fdefine.server.c
+//fdefine.server.c
 
 
 
@@ -260,7 +206,61 @@ int wrapper_memcmp(const void *s1, const void *s2, unsigned long n) ;
 char *wrapper_strcpy(char *dst, const char *src) ;
 
 char *wrapper_strcat(char *dst, const char *src) ;
-//fdefine.text_stack.c
+//fdefine.io.c
+unsigned char *wrapper_read_any(const char *path, long *size, int *is_binary);
+char *wrapper_read_string(const char *path);
+void wrapper_write_any(const char *path, const unsigned char *content, long size);
+
+void wrapper_write_string(const char *path, const char *content);
+void wrapper_delete_any(const char *path);
+void wrapper_create_dir(const char *path);
+
+int wrapper_file_exists(const char *path);
+int wrapper_dir_exists(const char *path);
+
+int wrapper_copy_any(const char *src, const char *dst);
+
+int wrapper_move_any(const char *src, const char *dst);
+
+void wrapper_append_string(const char *path, const char *content);
+
+char *wrapper_concat_path(const char *path1, const char *path2);
+
+void wrapper_delete_stringarray(void *array);
+long wrapper_get_stringarray_size(void *array);
+const char *wrapper_get_stringarray_item(void *array, int index);
+
+void *wrapper_list_files(const char *path);
+void *wrapper_list_dirs(const char *path);
+void *wrapper_list_any(const char *path);
+void *wrapper_list_files_recursively(const char *path);
+void *wrapper_list_dirs_recursively(const char *path);
+void *wrapper_list_any_recursively(const char *path);
+char *wrapper_generate_sha(const unsigned char *data, long size);
+
+char * wrapper_generate_cached_sha_from_file(const char *cache_path,const char *path);//fdefine.asssets.c
+
+const unsigned char *wrapper_get_asset_content(const char *path,long *size,int *is_binary);
+void *wrapper_list_assets(const char *path);
+//fdefine.time.c
+
+#include <time.h>
+
+long wrapper_get_unix_time(void) ;
+
+int wrapper_get_random(void) ;
+
+void wrapper_get_formatted_time(long timestamp, char *buf, int buf_size, const char *fmt) ;
+//fdefine.argv.c
+
+const char *wrapper_get_arg_value(const void *argv,int index);
+int wrapper_get_arg_count(const void *argv);
+
+const char *wrapper_get_arg_flag_value(const void *argv,const char **flags,int total_flags,int index);
+
+int wrapper_get_arg_flag_count(const void *argv,const char **flags,int total_flags);
+
+appbool wrapper_has_arg_flag(const void *argv,const char **flags,int total_flags);//fdefine.text_stack.c
 
 
 void *wrapper_new_text_stack(const char *text) ;
