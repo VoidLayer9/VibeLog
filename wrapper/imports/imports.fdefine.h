@@ -1,6 +1,6 @@
 #include "imports.globals.h"
-#ifndef Cortex_fdefine
-#define Cortex_fdefine
+#ifndef VibeLog_fdefine
+#define VibeLog_fdefine
 #include "../fdefine.argv.c"
 #include "../fdefine.asssets.c"
 #include "../fdefine.https_client.c"

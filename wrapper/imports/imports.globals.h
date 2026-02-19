@@ -1,5 +1,5 @@
 #include "imports.fdeclare.h"
-#ifndef Cortex_globals
-#define Cortex_globals
+#ifndef VibeLog_globals
+#define VibeLog_globals
 #include "../globals.global_vars.c"
 #endif

@@ -1,13 +1,13 @@
-PROJECT_NAME = "Cortex"
+PROJECT_NAME = "VibeLog"
 CONTANIZER   = darwin.argv.get_flag_arg_by_index({ "provider", "contanizer" }, 1, "docker")
 PORT  = darwin.argv.get_flag_arg_by_index({ "port" }, 1, "5000")
 VERSION      = "0.1.0"
 LICENSE      = "Unlicense"
-URL          = "https://github.com/mateusmoutinho/Cortex"
-DESCRIPITION = "Cortex - C-Based Web Server for vibecoding"
+URL          = "https://github.com/mateusmoutinho/VibeLog"
+DESCRIPITION = "VibeLog - C-Based Web Server for vibecoding"
 FULLNAME     = "Mateus Moutinho"
 EMAIL        = "[EMAIL_ADDRESS]"
-SUMARY       = "Cortex - C-Based Web Server for vibecoding"
+SUMARY       = "VibeLog - C-Based Web Server for vibecoding"
 LANGUAGE     = "c"
 COMPILER = darwin.argv.get_flag_arg_by_index({ "compiler" }, 1)
 ASSETS_DIR = darwin.argv.get_flag_arg_by_index({ "assets_dir" }, 1, "assets")
