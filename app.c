@@ -1051,12 +1051,35 @@ const appserverresponse *handle_api_list_files(appdeps *d,
   return resp;
 }
 
+const appserverresponse *handle_favicon(appdeps *d,
+                                        const appserverrequest *req) {
+  const char *candidates[] = {"config/favicon.ico", "config/favicon.png",
+                               "config/favicon.svg", app_null};
+  for (int i = 0; candidates[i] != app_null; i++) {
+    char *full_path =
+        d->concat_path(global_config.database_path, candidates[i]);
+    if (d->file_exists(full_path)) {
+      const char *mime = get_mime_type(d, candidates[i]);
+      const appserverresponse *resp = d->send_file(full_path, mime, 200);
+      d->free(full_path);
+      return resp;
+    }
+    d->free(full_path);
+  }
+  return d->send_text("Not Found", "text/plain", 404);
+}
+
 const appserverresponse *router(appdeps *d, void *props) {
   const char *route = d->get_server_route(d->appserverrequest);
   const char *method = d->get_server_method(d->appserverrequest);
 
   if (d->strcmp(route, "/") == 0 && d->strcmp(method, "GET") == 0) {
     return handle_home(d, d->appserverrequest);
+  }
+
+  if (d->strcmp(route, "/favicon.ico") == 0 &&
+      d->strcmp(method, "GET") == 0) {
+    return handle_favicon(d, d->appserverrequest);
   }
 
   if (d->strcmp(route, "/database_file") == 0 &&
@@ -1744,6 +1767,10 @@ const char *get_mime_type(appdeps *d, const char *path) {
     return "image/gif";
   if (d->strstr(path, ".webp"))
     return "image/webp";
+  if (d->strstr(path, ".ico"))
+    return "image/x-icon";
+  if (d->strstr(path, ".svg"))
+    return "image/svg+xml";
   return "application/octet-stream";
 }
 
