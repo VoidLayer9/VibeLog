@@ -533,10 +533,10 @@ const appserverresponse *handle_article(appdeps *d,
   d->ctext_append(t, "</article>");
 
   d->free(path);
-  d->json_delete(data);
 
   load_global_data(d); // For navbar
   char *full_html = render_page(d, title, d->ctext_get_text(t));
+  d->json_delete(data);
   d->ctext_free(t);
 
   const appserverresponse *resp = d->send_text(full_html, "text/html", 200);
