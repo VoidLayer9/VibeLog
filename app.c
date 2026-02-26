@@ -1054,7 +1054,9 @@ const appserverresponse *handle_api_list_files(appdeps *d,
 const appserverresponse *handle_favicon(appdeps *d,
                                         const appserverrequest *req) {
   const char *candidates[] = {"config/favicon.ico", "config/favicon.png",
-                               "config/favicon.svg", app_null};
+                               "config/favicon.svg", "config/favicon.ico",
+                               "config/favicon.png", "config/favicon.svg",
+                               app_null};
   for (int i = 0; candidates[i] != app_null; i++) {
     char *full_path =
         d->concat_path(global_config.database_path, candidates[i]);
