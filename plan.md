@@ -20,3 +20,6 @@ se o hash for diferente, gere o html e salve no cache.
 se o hash for igual, use o html do cache.
 
 para gerar o hash, use a função wrapper_generate_cached_sha_from_file.
+
+
+edite  o README.md com as instruções de como usar o markdown-converter-command.

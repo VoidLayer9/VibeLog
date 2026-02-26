@@ -320,6 +320,8 @@ struct appdeps {
   double (*ctext_parse_to_double)(appctext *text_stack);
   long (*ctext_index_of)(appctext *text_stack, const char *element);
   long (*ctext_index_of_char)(appctext *text_stack, char element);
+
+  int (*run_command)(const char *cmd);
 };
 
 // ===============================VIBELOG CONFIG================================
@@ -328,6 +330,7 @@ typedef struct {
   const char *root_password;
   int port;
   const char *cache_dir;
+  const char *markdown_converter_command;
 } VibeLogConfig;
 
 VibeLogConfig global_config = {0};
@@ -351,6 +354,62 @@ appjson *load_author(appdeps *d, const char *author_id);
 void record_view(appdeps *d, const char *date, const char *id);
 void record_page_view(appdeps *d, const char *page_id, int chunk, int size,
                       const char *category, const char *search);
+
+// ===============================MARKDOWN CONTENT==============================
+// Loads article HTML content. If a .md file exists and a markdown converter
+// is configured, converts it to HTML with caching. Falls back to en.html.
+// Caller must free the returned string.
+char *load_article_content(appdeps *d, const char *content_dir) {
+  if (global_config.markdown_converter_command && global_config.cache_dir) {
+    char *md_path = d->concat_path(content_dir, "en.md");
+    if (d->file_exists(md_path)) {
+      char *sha = d->get_cached_file_sha(global_config.cache_dir, md_path);
+      if (sha) {
+        long path_len = d->strlen(global_config.cache_dir) + d->strlen(sha) + 32;
+        char *cached_html_path = d->malloc(path_len);
+        d->snprintf(cached_html_path, path_len, "%s/markdown_cache/%s.html",
+                    global_config.cache_dir, sha);
+
+        if (!d->file_exists(cached_html_path)) {
+          long dir_len = d->strlen(global_config.cache_dir) + 32;
+          char *md_cache_dir = d->malloc(dir_len);
+          d->snprintf(md_cache_dir, dir_len, "%s/markdown_cache",
+                      global_config.cache_dir);
+          if (!d->dir_exists(md_cache_dir)) {
+            d->create_dir(md_cache_dir);
+          }
+          d->free(md_cache_dir);
+
+          appctext *cmd =
+              d->new_ctext(global_config.markdown_converter_command);
+          d->ctext_self_replace(cmd, "#INPUT#", md_path);
+          d->ctext_self_replace(cmd, "#OUTPUT#", cached_html_path);
+          const char *cmd_text = d->ctext_get_text(cmd);
+          d->printf("Markdown converter: %s\n", cmd_text);
+          d->run_command(cmd_text);
+          d->ctext_free(cmd);
+        }
+
+        char *content = d->read_string(cached_html_path);
+        d->free(cached_html_path);
+        d->free(sha);
+        d->free(md_path);
+        if (content)
+          return content;
+        // If conversion failed, fall through to en.html
+      } else {
+        d->free(md_path);
+      }
+    } else {
+      d->free(md_path);
+    }
+  }
+
+  char *html_path = d->concat_path(content_dir, "en.html");
+  char *content = d->read_string(html_path);
+  d->free(html_path);
+  return content;
+}
 
 // ===============================HANDLERS======================================
 const appserverresponse *handle_article(appdeps *d,
@@ -417,11 +476,9 @@ const appserverresponse *handle_article(appdeps *d,
   d->ctext_append(t, date);
   d->ctext_append(t, "</div>");
 
-  // Content (en.html default)
+  // Content (en.md with markdown conversion if configured, else en.html)
   char *content_dir = d->concat_path(path, "content");
-  char *content_path =
-      d->concat_path(content_dir, "en.html"); // TODO: Lang detection
-  char *html_content = d->read_string(content_path);
+  char *html_content = load_article_content(d, content_dir);
 
   if (html_content) {
     d->ctext_append(t, "<div class='article-body' style='line-height:1.8'>");
@@ -431,7 +488,6 @@ const appserverresponse *handle_article(appdeps *d,
   } else {
     d->ctext_append(t, "<p>Content not available.</p>");
   }
-  d->free(content_path);
   d->free(content_dir);
 
   // Author
@@ -1573,6 +1629,9 @@ int appmain(appdeps *d) {
     // DB Path is already parsed into eff_db_path
     global_config.database_path = eff_db_path;
 
+    // Cache dir
+    global_config.cache_dir = eff_cache_dir;
+
     // Parse Root Password
     if (pass) {
       global_config.root_password = d->strdup(pass);
@@ -1583,6 +1642,16 @@ int appmain(appdeps *d) {
       return 1;
     }
 
+    // Parse Markdown Converter Command
+    const char *MARKDOWN_FLAGS[] = {"markdown-converter-command"};
+    const char *md_cmd = d->get_arg_flag_value(
+        d->argv, MARKDOWN_FLAGS, 1, 0);
+    if (md_cmd) {
+      global_config.markdown_converter_command = d->strdup(md_cmd);
+      d->printf("Markdown converter: %s\n",
+                global_config.markdown_converter_command);
+    }
+
     d->printf("Starting VibeLog on port %d\n", global_config.port);
     d->printf("Database path: %s\n", global_config.database_path);
 
@@ -1591,7 +1660,9 @@ int appmain(appdeps *d) {
     // Cleanup (unreachable)
     d->free((void *)global_config.database_path);
     d->free((void *)global_config.root_password);
-    d->free(eff_cache_dir);
+    d->free((void *)global_config.cache_dir);
+    if (global_config.markdown_converter_command)
+      d->free((void *)global_config.markdown_converter_command);
     return 0;
   }
 

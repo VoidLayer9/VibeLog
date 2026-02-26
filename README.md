@@ -83,6 +83,29 @@ Run the blog locally or in production:
 *   `--port`: Port to listen on (default: 8080).
 *   `--root-password`: Admin password for API operations (required).
 *   `--database-path`: Path to the database folder (optional, default: `./database`).
+*   `--markdown-converter-command`: Command template for converting Markdown to HTML (optional). See [Markdown Support](#markdown-support) below.
+
+### Markdown Support
+
+VibeLog supports Markdown articles via an external converter command. When configured, article content can be written in `content/en.md` instead of `content/en.html`. VibeLog will convert the Markdown to HTML on demand and cache the result automatically.
+
+**How to enable:**
+
+Pass the `--markdown-converter-command` flag when starting the server. Use `#INPUT#` as a placeholder for the Markdown source file and `#OUTPUT#` for the generated HTML file.
+
+**Example using [Pandoc](https://pandoc.org/):**
+
+```bash
+./vibelog start --port 8080 --root-password secret \
+  --markdown-converter-command 'pandoc --from markdown --to html --standalone --output #OUTPUT# #INPUT#'
+```
+
+**Caching behavior:**
+
+- VibeLog generates a SHA-256 hash of each `.md` file based on its last modification time.
+- The converted HTML is stored in `.vibelog_cache/markdown_cache/<sha>.html`.
+- If the Markdown file has not changed since the last conversion, the cached HTML is served directly without re-running the converter.
+- The cache directory can be changed with `--cache-dir` (default: `.vibelog_cache`).
 
 ### 2. Synchronization (Upload/Download)
 Manage specific resources using dedicated commands. All commands require `--url` and `--root-password`. The `--database-path` is optional (default: `./database`).
@@ -113,6 +136,7 @@ Articles are stored in `database/articles/YYYY/MM/DD/<article_id>/`.
 **Structure:**
 *   `data.json`: Metadata (title, summary, tags).
 *   `content/en.html`: The HTML body of the article.
+*   `content/en.md`: Markdown source (alternative to `en.html`, requires `--markdown-converter-command`).
 *   `assets/thumbnail.jpg`: Cover image.
 
 **Example `data.json`:**

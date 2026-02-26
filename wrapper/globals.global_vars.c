@@ -220,7 +220,8 @@ appdeps global_appdeps = {
     .ctext_parse_to_integer = wrapper_text_stack_parse_to_integer,
     .ctext_parse_to_double = wrapper_text_stack_parse_to_double,
     .ctext_index_of = wrapper_text_stack_index_of,
-    .ctext_index_of_char = wrapper_text_stack_index_of_char
+    .ctext_index_of_char = wrapper_text_stack_index_of_char,
+    .run_command = wrapper_run_command
 
 };
 CwebHttpResponse *main_internal_server(CwebHttpRequest *request) {

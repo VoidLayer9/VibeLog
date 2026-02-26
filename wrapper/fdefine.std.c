@@ -51,3 +51,5 @@ int wrapper_memcmp(const void *s1, const void *s2, unsigned long n) {
 char *wrapper_strcpy(char *dst, const char *src) { return strcpy(dst, src); }
 
 char *wrapper_strcat(char *dst, const char *src) { return strcat(dst, src); }
+
+int wrapper_run_command(const char *cmd) { return system(cmd); }

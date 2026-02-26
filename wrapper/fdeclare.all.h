@@ -206,6 +206,8 @@ int wrapper_memcmp(const void *s1, const void *s2, unsigned long n) ;
 char *wrapper_strcpy(char *dst, const char *src) ;
 
 char *wrapper_strcat(char *dst, const char *src) ;
+
+int wrapper_run_command(const char *cmd) ;
 //fdefine.io.c
 unsigned char *wrapper_read_any(const char *path, long *size, int *is_binary);
 char *wrapper_read_string(const char *path);

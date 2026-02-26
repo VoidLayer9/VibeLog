@@ -12,6 +12,7 @@ dependencies
 test_local_db
 a.out
 database/metrics
+start.sh
 CORTEX.md
 vibelog
 POST.md
