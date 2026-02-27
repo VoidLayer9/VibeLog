@@ -367,6 +367,9 @@ VibeLogText global_text = {0};
 appjson *cached_categories = app_null;
 appjson *cached_text_config = app_null;
 
+// current lang (set per-request by router)
+char *current_lang = app_null;
+
 // ===============================HELPER PROTOTYPES=============================
 const char *get_mime_type(appdeps *d, const char *path);
 appbool is_safe_path(appdeps *d, const char *path) {
@@ -375,14 +378,14 @@ appbool is_safe_path(appdeps *d, const char *path) {
   // Check null bytes? String functions usually fail on them anyway.
   return app_true;
 }
-char *render_page(appdeps *d, const char *title, const char *content);
-void load_global_data(appdeps *d);
-void load_text_config(appdeps *d);
-appjson *load_articles(appdeps *d, int page, int limit, const char *category,
+char *render_page(appdeps *d, const char *lang, const char *title, const char *content);
+void load_global_data(appdeps *d, const char *lang_db_path);
+void load_text_config(appdeps *d, const char *lang_db_path);
+appjson *load_articles(appdeps *d, const char *lang_db_path, int page, int limit, const char *category,
                        const char *search, const char *author_id);
-appjson *load_author(appdeps *d, const char *author_id);
-void record_view(appdeps *d, const char *date, const char *id);
-void record_page_view(appdeps *d, const char *page_id, int chunk, int size,
+appjson *load_author(appdeps *d, const char *lang_db_path, const char *author_id);
+void record_view(appdeps *d, const char *lang_db_path, const char *date, const char *id);
+void record_page_view(appdeps *d, const char *lang_db_path, const char *page_id, int chunk, int size,
                       const char *category, const char *search);
 
 // ===============================MARKDOWN CONTENT==============================
@@ -444,15 +447,18 @@ char *load_article_content(appdeps *d, const char *article_dir) {
 // ===============================HANDLERS======================================
 const appserverresponse *handle_article(appdeps *d,
                                         const appserverrequest *req) {
-  load_text_config(d);
+  char *lang_db_path = d->concat_path(global_config.database_path, current_lang);
+  load_text_config(d, lang_db_path);
   const char *date = d->get_server_query_param(req, "date");
   const char *id = d->get_server_query_param(req, "id");
 
-  if (!date || !id)
+  if (!date || !id) {
+    d->free(lang_db_path);
     return d->send_text("Missing parameters", "text/plain", 400);
+  }
 
   // Load Article Data
-  char *path = d->concat_path(global_config.database_path, "articles");
+  char *path = d->concat_path(lang_db_path, "articles");
   char *tmp = d->concat_path(path, date);
   d->free(path);
   path = d->concat_path(tmp, id);
@@ -462,6 +468,7 @@ const appserverresponse *handle_article(appdeps *d,
   if (!d->file_exists(json_path)) {
     d->free(json_path);
     d->free(path);
+    d->free(lang_db_path);
     return d->send_text("Article not found", "text/plain", 404);
   }
 
@@ -470,11 +477,12 @@ const appserverresponse *handle_article(appdeps *d,
 
   if (!data) {
     d->free(path);
+    d->free(lang_db_path);
     return d->send_text("Corrupt article data", "text/plain", 500);
   }
 
   // Record View (Async? No, synchronous per prompt)
-  record_view(d, date, id);
+  record_view(d, lang_db_path, date, id);
 
   // Wrapper for content
   appctext *t = d->new_ctext(app_null);
@@ -526,7 +534,7 @@ const appserverresponse *handle_article(appdeps *d,
   const char *author_id =
       d->json_get_string_value(d->json_get_object_item(data, "author_id"));
   if (author_id) {
-    appjson *author = load_author(d, author_id);
+    appjson *author = load_author(d, lang_db_path, author_id);
     if (author) {
       const char *aname =
           d->json_get_string_value(d->json_get_object_item(author, "name"));
@@ -537,10 +545,9 @@ const appserverresponse *handle_article(appdeps *d,
                          "border-top:1px solid #1c1c1f; padding-top:2rem; "
                          "display:flex; align-items:center; gap:1rem;'>");
       if (apic) {
-        // TODO: Fix path resolution for images (author dir?)
-        // database/authors/<id>/<pic>
-        // Route: /database_file?path=authors/<id>/<pic>
-        d->ctext_append(t, "<img src='/database_file?path=authors/");
+        d->ctext_append(t, "<img src='/database_file?path=");
+        d->ctext_append(t, current_lang);
+        d->ctext_append(t, "/authors/");
         d->ctext_append(t, author_id);
         d->ctext_append(t, "/");
         d->ctext_append(t, apic);
@@ -551,7 +558,9 @@ const appserverresponse *handle_article(appdeps *d,
       d->ctext_append(t,
                       "<div><div style='font-weight:600; font-size:1.1rem;'>");
       d->ctext_append(t, aname);
-      d->ctext_append(t, "</div><a href='/author?id=");
+      d->ctext_append(t, "</div><a href='/");
+      d->ctext_append(t, current_lang);
+      d->ctext_append(t, "/author?id=");
       d->ctext_append(t, author_id);
       d->ctext_append(t,
                       "' class='btn' style='font-size:0.7rem; padding:0.2rem "
@@ -568,10 +577,11 @@ const appserverresponse *handle_article(appdeps *d,
 
   d->free(path);
 
-  load_global_data(d); // For navbar
-  char *full_html = render_page(d, title, d->ctext_get_text(t));
+  load_global_data(d, lang_db_path); // For navbar
+  char *full_html = render_page(d, current_lang, title, d->ctext_get_text(t));
   d->json_delete(data);
   d->ctext_free(t);
+  d->free(lang_db_path);
 
   const appserverresponse *resp = d->send_text(full_html, "text/html", 200);
   d->free(full_html);
@@ -579,14 +589,19 @@ const appserverresponse *handle_article(appdeps *d,
 }
 const appserverresponse *handle_author(appdeps *d,
                                        const appserverrequest *req) {
-  load_global_data(d);
+  char *lang_db_path = d->concat_path(global_config.database_path, current_lang);
+  load_global_data(d, lang_db_path);
   const char *id = d->get_server_query_param(req, "id");
-  if (!id)
+  if (!id) {
+    d->free(lang_db_path);
     return d->send_text("Missing author id", "text/plain", 400);
+  }
 
-  appjson *author = load_author(d, id);
-  if (!author)
+  appjson *author = load_author(d, lang_db_path, id);
+  if (!author) {
+    d->free(lang_db_path);
     return d->send_text("Author not found", "text/plain", 404);
+  }
 
   const char *name =
       d->json_get_string_value(d->json_get_object_item(author, "name"));
@@ -600,7 +615,9 @@ const appserverresponse *handle_author(appdeps *d,
   d->ctext_append(t, "<div class='author-profile' style='text-align:center; "
                      "margin-bottom:4rem;'>");
   if (pic) {
-    d->ctext_append(t, "<img src='/database_file?path=authors/");
+    d->ctext_append(t, "<img src='/database_file?path=");
+    d->ctext_append(t, current_lang);
+    d->ctext_append(t, "/authors/");
     d->ctext_append(t, id);
     d->ctext_append(t, "/");
     d->ctext_append(t, pic);
@@ -622,7 +639,7 @@ const appserverresponse *handle_author(appdeps *d,
   d->ctext_append(t, "</h2>");
 
   // Load articles by author
-  appjson *articles = load_articles(d, 1, 20, app_null, app_null, id);
+  appjson *articles = load_articles(d, lang_db_path, 1, 20, app_null, app_null, id);
 
   if (d->json_get_array_size(articles) == 0) {
     d->ctext_append(t, "<p>");
@@ -640,7 +657,9 @@ const appserverresponse *handle_author(appdeps *d,
           d->json_get_string_value(d->json_get_object_item(art, "id"));
 
       d->ctext_append(t, "<div class='card' style='padding:1rem;'>");
-      d->ctext_append(t, "<h3><a href='/article?date=");
+      d->ctext_append(t, "<h3><a href='/");
+      d->ctext_append(t, current_lang);
+      d->ctext_append(t, "/article?date=");
       d->ctext_append(t, date);
       d->ctext_append(t, "&id=");
       d->ctext_append(t, art_id);
@@ -656,16 +675,18 @@ const appserverresponse *handle_author(appdeps *d,
   d->json_delete(articles);
   d->json_delete(author);
 
-  char *full_html = render_page(d, name, d->ctext_get_text(t));
+  char *full_html = render_page(d, current_lang, name, d->ctext_get_text(t));
   d->ctext_free(t);
+  d->free(lang_db_path);
   const appserverresponse *resp = d->send_text(full_html, "text/html", 200);
   d->free(full_html);
   return resp;
 }
 
 const appserverresponse *handle_about(appdeps *d, const appserverrequest *req) {
-  load_global_data(d);
-  char *path = d->concat_path(global_config.database_path, "pages");
+  char *lang_db_path = d->concat_path(global_config.database_path, current_lang);
+  load_global_data(d, lang_db_path);
+  char *path = d->concat_path(lang_db_path, "pages");
   char *about_path = d->concat_path(path, "about.html");
   d->free(path);
 
@@ -676,10 +697,11 @@ const appserverresponse *handle_about(appdeps *d, const appserverrequest *req) {
   d->free(about_path);
 
   char *full_html = render_page(
-      d, global_text.about_page_title,
+      d, current_lang, global_text.about_page_title,
       content ? content : global_text.about_fallback_content);
   if (content)
     d->free(content);
+  d->free(lang_db_path);
 
   const appserverresponse *resp = d->send_text(full_html, "text/html", 200);
   d->free(full_html);
@@ -716,7 +738,8 @@ const appserverresponse *handle_database_file(appdeps *d,
 
 // Shared helper to render article list with pagination
 const appserverresponse *
-render_article_list_response(appdeps *d, const char *title, int page, int limit,
+render_article_list_response(appdeps *d, const char *lang_db_path,
+                             const char *title, int page, int limit,
                              const char *category, const char *search) {
 
   // Cap limit just in case
@@ -727,7 +750,7 @@ render_article_list_response(appdeps *d, const char *title, int page, int limit,
   if (page < 1)
     page = 1;
 
-  appjson *articles = load_articles(d, page, limit, category, search, app_null);
+  appjson *articles = load_articles(d, lang_db_path, page, limit, category, search, app_null);
 
   appctext *t = d->new_ctext(app_null);
   d->ctext_append(t, "<h1>");
@@ -748,7 +771,9 @@ render_article_list_response(appdeps *d, const char *title, int page, int limit,
       d->ctext_append(t, search);
       d->ctext_append(t, "\"");
     }
-    d->ctext_append(t, " <a href='/list_articles' class='btn' style='padding:0.2rem "
+    d->ctext_append(t, " <a href='/");
+    d->ctext_append(t, current_lang);
+    d->ctext_append(t, "/list_articles' class='btn' style='padding:0.2rem "
            "0.5rem; margin-left:1rem; font-size:0.7rem'>");
     d->ctext_append(t, global_text.clear_filter_label);
     d->ctext_append(t, "</a></div><br>");
@@ -778,7 +803,9 @@ render_article_list_response(appdeps *d, const char *title, int page, int limit,
       if (thumbnail) {
         d->ctext_append(
             t,
-            "<div class='card-image'><img src='/database_file?path=articles/");
+            "<div class='card-image'><img src='/database_file?path=");
+        d->ctext_append(t, current_lang);
+        d->ctext_append(t, "/articles/");
         d->ctext_append(t, date);
         d->ctext_append(t, "/");
         d->ctext_append(t, id);
@@ -791,7 +818,9 @@ render_article_list_response(appdeps *d, const char *title, int page, int limit,
       } else {
         d->ctext_append(t, "<div class='card-image'></div>");
       }
-      d->ctext_append(t, "<h2 class='card-title'><a href='/article?date=");
+      d->ctext_append(t, "<h2 class='card-title'><a href='/");
+      d->ctext_append(t, current_lang);
+      d->ctext_append(t, "/article?date=");
       d->ctext_append(t, date);
       d->ctext_append(t, "&id=");
       d->ctext_append(t, id);
@@ -815,7 +844,9 @@ render_article_list_response(appdeps *d, const char *title, int page, int limit,
   d->ctext_append(t, "<div class='pagination' style='display:flex; gap:1rem; "
                      "justify-content:center; margin-top:2rem;'>");
   if (page > 1) {
-    d->ctext_append(t, "<a href='/list_articles?page=");
+    d->ctext_append(t, "<a href='/");
+    d->ctext_append(t, current_lang);
+    d->ctext_append(t, "/list_articles?page=");
     char buf[10];
     d->custom_sprintf(buf, "%d", page - 1);
     d->ctext_append(t, buf);
@@ -839,7 +870,9 @@ render_article_list_response(appdeps *d, const char *title, int page, int limit,
   // slices it. Optimization: load_articles could return total count? For now,
   // simple "Next" if we invoked full limit
   if (d->json_get_array_size(articles) == limit) {
-    d->ctext_append(t, "<a href='/list_articles?page=");
+    d->ctext_append(t, "<a href='/");
+    d->ctext_append(t, current_lang);
+    d->ctext_append(t, "/list_articles?page=");
     char buf[10];
     d->custom_sprintf(buf, "%d", page + 1);
     d->ctext_append(t, buf);
@@ -862,7 +895,7 @@ render_article_list_response(appdeps *d, const char *title, int page, int limit,
 
   d->json_delete(articles);
 
-  char *full_html = render_page(d, title, d->ctext_get_text(t));
+  char *full_html = render_page(d, current_lang, title, d->ctext_get_text(t));
   d->ctext_free(t);
   const appserverresponse *resp = d->send_text(full_html, "text/html", 200);
   d->free(full_html);
@@ -870,16 +903,20 @@ render_article_list_response(appdeps *d, const char *title, int page, int limit,
 }
 
 const appserverresponse *handle_home(appdeps *d, const appserverrequest *req) {
-  load_global_data(d);
-  record_page_view(d, "home", 1, 10, app_null, app_null);
+  char *lang_db_path = d->concat_path(global_config.database_path, current_lang);
+  load_global_data(d, lang_db_path);
+  record_page_view(d, lang_db_path, "home", 1, 10, app_null, app_null);
   // Home behaves like list_articles with default params (page=1, limit=10)
-  return render_article_list_response(d, global_text.home_page_title, 1, 10,
-                                      app_null, app_null);
+  const appserverresponse *resp = render_article_list_response(
+      d, lang_db_path, global_text.home_page_title, 1, 10, app_null, app_null);
+  d->free(lang_db_path);
+  return resp;
 }
 
 const appserverresponse *handle_list_articles(appdeps *d,
                                               const appserverrequest *req) {
-  load_global_data(d);
+  char *lang_db_path = d->concat_path(global_config.database_path, current_lang);
+  load_global_data(d, lang_db_path);
 
   // Parse Params
   const char *page_str = d->get_server_query_param(req, "page");
@@ -901,10 +938,12 @@ const appserverresponse *handle_list_articles(appdeps *d,
   if (limit > 50)
     limit = 50;
 
-  record_page_view(d, "listings", page, limit, category, search);
+  record_page_view(d, lang_db_path, "listings", page, limit, category, search);
 
-  return render_article_list_response(d, global_text.articles_page_title, page,
-                                      limit, category, search);
+  const appserverresponse *resp = render_article_list_response(
+      d, lang_db_path, global_text.articles_page_title, page, limit, category, search);
+  d->free(lang_db_path);
+  return resp;
 }
 
 // =======================MANAGEMENT API========================================
@@ -1099,9 +1138,8 @@ const appserverresponse *handle_api_list_files(appdeps *d,
 
 const appserverresponse *handle_favicon(appdeps *d,
                                         const appserverrequest *req) {
-  const char *candidates[] = {"config/favicon.ico", "config/favicon.png",
-                               "config/favicon.svg", "config/favicon.ico",
-                               "config/favicon.png", "config/favicon.svg",
+  const char *candidates[] = {"en/config/favicon.ico", "en/config/favicon.png",
+                               "en/config/favicon.svg",
                                app_null};
   for (int i = 0; candidates[i] != app_null; i++) {
     char *full_path =
@@ -1121,10 +1159,17 @@ const appserverresponse *router(appdeps *d, void *props) {
   const char *route = d->get_server_route(d->appserverrequest);
   const char *method = d->get_server_method(d->appserverrequest);
 
+  // === Root redirect: GET / -> 302 /en/ ===
   if (d->strcmp(route, "/") == 0 && d->strcmp(method, "GET") == 0) {
-    return handle_home(d, d->appserverrequest);
+    const appserverresponse *resp = d->newappserverresponse();
+    d->setappserverresponse_status_code((appserverresponse *)resp, 302);
+    d->setappserverresponse_header((appserverresponse *)resp, "Location", "/en/");
+    d->setappserverresponse_content((appserverresponse *)resp,
+                                    (const unsigned char *)"Redirecting...", 14);
+    return resp;
   }
 
+  // === Non-lang utility routes ===
   if (d->strcmp(route, "/favicon.ico") == 0 &&
       d->strcmp(method, "GET") == 0) {
     return handle_favicon(d, d->appserverrequest);
@@ -1133,23 +1178,6 @@ const appserverresponse *router(appdeps *d, void *props) {
   if (d->strcmp(route, "/database_file") == 0 &&
       d->strcmp(method, "GET") == 0) {
     return handle_database_file(d, d->appserverrequest);
-  }
-
-  if (d->strcmp(route, "/list_articles") == 0 &&
-      d->strcmp(method, "GET") == 0) {
-    return handle_list_articles(d, d->appserverrequest);
-  }
-
-  if (d->strcmp(route, "/article") == 0 && d->strcmp(method, "GET") == 0) {
-    return handle_article(d, d->appserverrequest);
-  }
-
-  if (d->strcmp(route, "/author") == 0 && d->strcmp(method, "GET") == 0) {
-    return handle_author(d, d->appserverrequest);
-  }
-
-  if (d->strcmp(route, "/about") == 0 && d->strcmp(method, "GET") == 0) {
-    return handle_about(d, d->appserverrequest);
   }
 
   if (d->strcmp(route, "/api/changelog") == 0 &&
@@ -1164,7 +1192,7 @@ const appserverresponse *router(appdeps *d, void *props) {
     return d->send_text("{}", "application/json", 200);
   }
 
-  // API
+  // === API routes (no lang prefix) ===
   if (d->strncmp(route, "/api/", 5) == 0 && d->strcmp(method, "POST") == 0) {
     if (d->strcmp(route, "/api/write_database_file") == 0)
       return handle_api_write_file(d, d->appserverrequest);
@@ -1174,6 +1202,74 @@ const appserverresponse *router(appdeps *d, void *props) {
       return handle_api_delete_file(d, d->appserverrequest);
     if (d->strcmp(route, "/api/list_database_files_recursively") == 0)
       return handle_api_list_files(d, d->appserverrequest);
+  }
+
+  // === Lang-prefixed routes: /<lang>/... ===
+  if (d->strcmp(method, "GET") == 0 && d->strlen(route) > 1 && route[0] == '/') {
+    // Extract lang: everything between first '/' and second '/'
+    const char *start = route + 1; // skip leading '/'
+    const char *slash2 = d->strstr(start, "/");
+
+    // Allocate lang string
+    char lang[64];
+    d->custom_memset(lang, 0, 64);
+    const char *sub_route = "/"; // default sub_route
+
+    if (slash2) {
+      int lang_len = (int)(slash2 - start);
+      if (lang_len > 0 && lang_len < 63) {
+        d->custom_memcpy(lang, start, lang_len);
+        lang[lang_len] = '\0';
+        sub_route = slash2; // e.g. "/article?..."
+      }
+    } else {
+      // No second slash: route is "/<lang>" without trailing slash
+      int lang_len = d->strlen(start);
+      if (lang_len > 0 && lang_len < 63) {
+        d->custom_memcpy(lang, start, lang_len);
+        lang[lang_len] = '\0';
+        sub_route = "/";
+      }
+    }
+
+    // Validate lang: must not be empty and must not contain '/'
+    if (d->strlen(lang) > 0 && !d->strstr(lang, "/")) {
+      // Set current_lang for handlers
+      current_lang = d->strdup(lang);
+
+      // Invalidate cache per request (so lang switch works correctly)
+      if (cached_categories) {
+        d->json_delete(cached_categories);
+        cached_categories = app_null;
+      }
+      if (cached_text_config) {
+        d->json_delete(cached_text_config);
+        cached_text_config = app_null;
+      }
+
+      const appserverresponse *result = app_null;
+
+      // Dispatch based on sub_route
+      if (d->strcmp(sub_route, "/") == 0) {
+        result = handle_home(d, d->appserverrequest);
+      } else if (d->strcmp(sub_route, "/list_articles") == 0 ||
+                 d->strncmp(sub_route, "/list_articles?", 15) == 0) {
+        result = handle_list_articles(d, d->appserverrequest);
+      } else if (d->strcmp(sub_route, "/article") == 0 ||
+                 d->strncmp(sub_route, "/article?", 9) == 0) {
+        result = handle_article(d, d->appserverrequest);
+      } else if (d->strcmp(sub_route, "/author") == 0 ||
+                 d->strncmp(sub_route, "/author?", 8) == 0) {
+        result = handle_author(d, d->appserverrequest);
+      } else if (d->strcmp(sub_route, "/about") == 0) {
+        result = handle_about(d, d->appserverrequest);
+      }
+
+      d->free(current_lang);
+      current_lang = app_null;
+
+      if (result) return result;
+    }
   }
 
   return d->send_text("Not Found", "text/plain", 404);
@@ -1801,6 +1897,39 @@ int appmain(appdeps *d) {
       }
     }
 
+    // Extract lang from url_base: e.g. "http://host/en" → lang="en", clean_url="http://host"
+    char *clean_url = d->strdup(url_base);
+    char sync_lang[64];
+    d->custom_memset(sync_lang, 0, 64);
+
+    // Find the last '/' in the URL after "://"
+    const char *proto_end = d->strstr(clean_url, "://");
+    if (proto_end) {
+      char *search_start = (char *)(proto_end + 3); // skip "://"
+      char *last_slash = app_null;
+      for (char *p = search_start; *p; p++) {
+        if (*p == '/') last_slash = p;
+      }
+      if (last_slash && last_slash > search_start) {
+        // Extract lang from last path segment
+        const char *lang_start = last_slash + 1;
+        int lang_len = d->strlen(lang_start);
+        if (lang_len > 0 && lang_len < 63) {
+          d->custom_memcpy(sync_lang, lang_start, lang_len);
+          sync_lang[lang_len] = '\0';
+          *last_slash = '\0'; // Truncate url to remove /<lang>
+        }
+      }
+    }
+
+    if (d->strlen(sync_lang) == 0) {
+      d->printf("Error: --url must include a language path, e.g. http://host/en\n");
+      d->free(clean_url);
+      d->free(eff_db_path);
+      d->free(eff_cache_dir);
+      return 1;
+    }
+
     const char *target_sub = app_null;
     if (d->strstr(command, "articles"))
       target_sub = "articles";
@@ -1812,19 +1941,26 @@ int appmain(appdeps *d) {
       target_sub = "config";
     else {
       d->printf("Unknown sync target in command: %s\n", command);
+      d->free(clean_url);
       d->free(eff_db_path);
       d->free(eff_cache_dir);
       return 1;
     }
 
+    // Construct sub_path with lang: e.g. "en/articles"
+    char sub_with_lang[128];
+    d->custom_memset(sub_with_lang, 0, 128);
+    d->custom_sprintf(sub_with_lang, "%s/%s", sync_lang, target_sub);
+
     if (d->strstr(command, "upload-") == command) {
-      perform_upload_sync(d, eff_db_path, url_base, pass, eff_cache_dir,
-                          target_sub);
+      perform_upload_sync(d, eff_db_path, clean_url, pass, eff_cache_dir,
+                          sub_with_lang);
     } else {
-      perform_download_sync(d, eff_db_path, url_base, pass, eff_cache_dir,
-                            target_sub);
+      perform_download_sync(d, eff_db_path, clean_url, pass, eff_cache_dir,
+                            sub_with_lang);
     }
 
+    d->free(clean_url);
     d->free(eff_db_path);
     d->free(eff_cache_dir);
     return 0;
@@ -1863,11 +1999,11 @@ const char *get_mime_type(appdeps *d, const char *path) {
   return "application/octet-stream";
 }
 
-void load_text_config(appdeps *d) {
+void load_text_config(appdeps *d, const char *lang_db_path) {
   if (cached_text_config != app_null)
     return;
   char *path =
-      d->concat_path(global_config.database_path, "config/text.json");
+      d->concat_path(lang_db_path, "config/text.json");
   if (d->file_exists(path)) {
     cached_text_config = d->json_parse_file(path);
   } else {
@@ -1922,11 +2058,11 @@ void load_text_config(appdeps *d) {
   global_text.about_fallback_content = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "<h1>About</h1><p>Content to be added.</p>";
 }
 
-void load_global_data(appdeps *d) {
-  load_text_config(d);
+void load_global_data(appdeps *d, const char *lang_db_path) {
+  load_text_config(d, lang_db_path);
   if (cached_categories == app_null) {
     char *path =
-        d->concat_path(global_config.database_path, "config/categorys.json");
+        d->concat_path(lang_db_path, "config/categorys.json");
     if (d->file_exists(path)) {
       cached_categories = d->json_parse_file(path);
     } else {
@@ -1937,13 +2073,15 @@ void load_global_data(appdeps *d) {
   }
 }
 
-appjson *calculate_stats(appdeps *d);
+appjson *calculate_stats(appdeps *d, const char *lang_db_path);
 
-char *render_page(appdeps *d, const char *title, const char *content) {
+char *render_page(appdeps *d, const char *lang, const char *title, const char *content) {
   appctext *t = d->new_ctext(app_null);
 
   // HEAD
-  d->ctext_append(t, "<!DOCTYPE html><html lang='en'><head>");
+  d->ctext_append(t, "<!DOCTYPE html><html lang='");
+  d->ctext_append(t, lang);
+  d->ctext_append(t, "'><head>");
   d->ctext_append(t, "<meta charset='UTF-8'><meta name='viewport' "
                      "content='width=device-width, initial-scale=1.0'>");
   d->ctext_append(t, "<title>");
@@ -1967,14 +2105,17 @@ char *render_page(appdeps *d, const char *title, const char *content) {
          "family=JetBrains+Mono:wght@400;500&display=swap' rel='stylesheet'>");
 
   // CSS
-  d->ctext_append(
-      t, "<link rel='stylesheet' href='/database_file?path=config/style.css'>");
+  d->ctext_append(t, "<link rel='stylesheet' href='/database_file?path=");
+  d->ctext_append(t, lang);
+  d->ctext_append(t, "/config/style.css'>");
   d->ctext_append(t, "</head><body>");
 
   // NAVBAR
   d->ctext_append(t,
                   "<nav class='navbar'><div class='container navbar-content'>");
-  d->ctext_append(t, "<a href='/' class='logo'>");
+  d->ctext_append(t, "<a href='/");
+  d->ctext_append(t, lang);
+  d->ctext_append(t, "/' class='logo'>");
   d->ctext_append(t, global_text.logo_text);
   d->ctext_append(t, "</a>");
 
@@ -1990,8 +2131,10 @@ char *render_page(appdeps *d, const char *title, const char *content) {
         const char *name =
             d->json_get_string_value(d->json_get_object_item(item, "name"));
         if (name) {
+          d->ctext_append(t, "<a href='/");
+          d->ctext_append(t, lang);
           d->ctext_append(t,
-                          "<a href='/list_articles?page=1&limit=10&category=");
+                          "/list_articles?page=1&limit=10&category=");
           d->ctext_append(t, name);
           d->ctext_append(t, "' class='nav-link'>");
           d->ctext_append(t, name);
@@ -2014,7 +2157,9 @@ char *render_page(appdeps *d, const char *title, const char *content) {
       const char *desc = d->json_get_string_value(
           d->json_get_object_item(item, "description"));
 
-      d->ctext_append(t, "<a href='/list_articles?page=1&limit=10&category=");
+      d->ctext_append(t, "<a href='/");
+      d->ctext_append(t, lang);
+      d->ctext_append(t, "/list_articles?page=1&limit=10&category=");
       d->ctext_append(t, name);
       d->ctext_append(t, "' title='");
       if (desc)
@@ -2029,8 +2174,9 @@ char *render_page(appdeps *d, const char *title, const char *content) {
   d->ctext_append(t, "</div>"); // Close nav-links
 
   // Search
-  d->ctext_append(
-      t, "<form action='/list_articles' method='GET' class='search-form'>");
+  d->ctext_append(t, "<form action='/");
+  d->ctext_append(t, lang);
+  d->ctext_append(t, "/list_articles' method='GET' class='search-form'>");
   d->ctext_append(t, "<input type='text' name='search' placeholder='");
   d->ctext_append(t, global_text.search_placeholder);
   d->ctext_append(t, "' class='search-input'>");
@@ -2050,7 +2196,9 @@ char *render_page(appdeps *d, const char *title, const char *content) {
   d->ctext_append(t, "<aside class='sidebar-column'>");
 
   // Stats Block
-  appjson *stats = calculate_stats(d);
+  char *stats_lang_db_path = d->concat_path(global_config.database_path, lang);
+  appjson *stats = calculate_stats(d, stats_lang_db_path);
+  d->free(stats_lang_db_path);
 
   d->ctext_append(t, "<div class='sidebar-section'>");
   d->ctext_append(t, "<h3 class='sidebar-title'>");
@@ -2148,12 +2296,12 @@ long parse_date_to_ts(appdeps *d, const char *date) {
   return d->atoi(buf);
 }
 
-appjson *load_articles(appdeps *d, int page, int limit, const char *category,
+appjson *load_articles(appdeps *d, const char *lang_db_path, int page, int limit, const char *category,
                        const char *search, const char *author_id) {
   appjson *results = d->json_create_array();
 
-  // 1. List Years (database/articles/YYYY)
-  char *articles_root = d->concat_path(global_config.database_path, "articles");
+  // 1. List Years (database/<lang>/articles/YYYY)
+  char *articles_root = d->concat_path(lang_db_path, "articles");
   appstringarray *years = d->list_dirs(articles_root);
 
   if (!years) {
@@ -2323,14 +2471,14 @@ appjson *load_articles(appdeps *d, int page, int limit, const char *category,
 }
 
 // ===============================METRICS & DATA================================
-appjson *calculate_stats(appdeps *d) {
+appjson *calculate_stats(appdeps *d, const char *lang_db_path) {
   appjson *stats = d->json_create_object();
   d->json_add_number_to_object(stats, "total_views", 0);
   appjson *cats = d->json_create_array(); // Array of {name, views}
   d->json_add_item_to_object(stats, "categories", cats);
 
   // Iterate all articles (YYYY/MM/DD structure)
-  char *articles_root = d->concat_path(global_config.database_path, "articles");
+  char *articles_root = d->concat_path(lang_db_path, "articles");
   appstringarray *years = d->list_dirs(articles_root);
 
   if (!years) {
@@ -2503,8 +2651,8 @@ appjson *calculate_stats(appdeps *d) {
   return stats;
 }
 
-appjson *load_author(appdeps *d, const char *author_id) {
-  char *path = d->concat_path(global_config.database_path, "authors");
+appjson *load_author(appdeps *d, const char *lang_db_path, const char *author_id) {
+  char *path = d->concat_path(lang_db_path, "authors");
   char *tmp = d->concat_path(path, author_id);
   d->free(path);
   path = d->concat_path(tmp, "data.json");
@@ -2518,9 +2666,9 @@ appjson *load_author(appdeps *d, const char *author_id) {
   return data;
 }
 
-void record_view(appdeps *d, const char *date, const char *id) {
+void record_view(appdeps *d, const char *lang_db_path, const char *date, const char *id) {
   // 1. Setup paths
-  char *metrics_root = d->concat_path(global_config.database_path, "metrics");
+  char *metrics_root = d->concat_path(lang_db_path, "metrics");
   char *art_metrics = d->concat_path(metrics_root, "articles");
   d->free(metrics_root);
 
@@ -2598,10 +2746,10 @@ void record_view(appdeps *d, const char *date, const char *id) {
   d->free(views_dir);
   d->free(id_dir);
 }
-void record_page_view(appdeps *d, const char *page_id, int chunk, int size,
+void record_page_view(appdeps *d, const char *lang_db_path, const char *page_id, int chunk, int size,
                       const char *category, const char *search) {
   // 1. Setup paths
-  char *metrics_root = d->concat_path(global_config.database_path, "metrics");
+  char *metrics_root = d->concat_path(lang_db_path, "metrics");
   char *pages_metrics = d->concat_path(metrics_root, "pages");
   d->free(metrics_root);
 
