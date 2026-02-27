@@ -384,7 +384,9 @@ void load_text_config(appdeps *d, const char *lang_db_path);
 appjson *load_articles(appdeps *d, const char *lang_db_path, int page, int limit, const char *category,
                        const char *search, const char *author_id);
 appjson *load_author(appdeps *d, const char *lang_db_path, const char *author_id);
-void record_view(appdeps *d, const char *lang_db_path, const char *date, const char *id);
+void record_view(appdeps *d, const char *lang_db_path, const char *date, const char *id,
+                 const char *language, const char *device, const char *country, double duration);
+const appserverresponse *handle_api_record_view(appdeps *d, const appserverrequest *req);
 void record_page_view(appdeps *d, const char *lang_db_path, const char *page_id, int chunk, int size,
                       const char *category, const char *search);
 
@@ -481,8 +483,6 @@ const appserverresponse *handle_article(appdeps *d,
     return d->send_text("Corrupt article data", "text/plain", 500);
   }
 
-  // Record View (Async? No, synchronous per prompt)
-  record_view(d, lang_db_path, date, id);
 
   // Wrapper for content
   appctext *t = d->new_ctext(app_null);
@@ -572,6 +572,53 @@ const appserverresponse *handle_article(appdeps *d,
       d->json_delete(author);
     }
   }
+
+  // Client-side view tracking script
+  d->ctext_append(t, "<script>");
+  d->ctext_append(t, "(function(){");
+  d->ctext_append(t, "var _vl_start=Date.now();");
+  d->ctext_append(t, "var _vl_date='");
+  d->ctext_append(t, date);
+  d->ctext_append(t, "';");
+  d->ctext_append(t, "var _vl_id='");
+  d->ctext_append(t, id);
+  d->ctext_append(t, "';");
+  d->ctext_append(t, "var _vl_lang='");
+  d->ctext_append(t, current_lang);
+  d->ctext_append(t, "';");
+  d->ctext_append(t, "var _vl_sent=false;");
+  d->ctext_append(t, "function _vl_device(){");
+  d->ctext_append(t, "var w=screen.width||window.innerWidth;");
+  d->ctext_append(t, "if(w<768)return 'mobile';");
+  d->ctext_append(t, "if(w<1024)return 'tablet';");
+  d->ctext_append(t, "return 'desktop';}");
+  d->ctext_append(t, "function _vl_country(){");
+  d->ctext_append(t, "try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone;");
+  d->ctext_append(t, "var m={'America':'US','Europe':'EU','Asia':'AS','Africa':'AF','Australia':'AU','Pacific':'OC','Antarctica':'AQ'};");
+  d->ctext_append(t, "var r=tz.split('/')[0];");
+  d->ctext_append(t, "return m[r]||'unknown';");
+  d->ctext_append(t, "}catch(e){return 'unknown';}}");
+  d->ctext_append(t, "function _vl_send(){");
+  d->ctext_append(t, "if(_vl_sent)return;");
+  d->ctext_append(t, "_vl_sent=true;");
+  d->ctext_append(t, "var dur=Math.round((Date.now()-_vl_start)/1000);");
+  d->ctext_append(t, "var data=JSON.stringify({");
+  d->ctext_append(t, "date:_vl_date,id:_vl_id,lang:_vl_lang,");
+  d->ctext_append(t, "language:navigator.language||'unknown',");
+  d->ctext_append(t, "device:_vl_device(),");
+  d->ctext_append(t, "country:_vl_country(),");
+  d->ctext_append(t, "duration:dur});");
+  d->ctext_append(t, "if(navigator.sendBeacon){");
+  d->ctext_append(t, "navigator.sendBeacon('/api/record_view',new Blob([data],{type:'application/json'}));");
+  d->ctext_append(t, "}else{");
+  d->ctext_append(t, "var x=new XMLHttpRequest();");
+  d->ctext_append(t, "x.open('POST','/api/record_view',false);");
+  d->ctext_append(t, "x.setRequestHeader('Content-Type','application/json');");
+  d->ctext_append(t, "x.send(data);}}");
+  d->ctext_append(t, "document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')_vl_send();});");
+  d->ctext_append(t, "window.addEventListener('beforeunload',_vl_send);");
+  d->ctext_append(t, "})();");
+  d->ctext_append(t, "</script>");
 
   d->ctext_append(t, "</article>");
 
@@ -1190,6 +1237,12 @@ const appserverresponse *router(appdeps *d, void *props) {
       return d->send_any(meta_content, asset_size, "application/json", 200);
     }
     return d->send_text("{}", "application/json", 200);
+  }
+
+  // === Public API routes (no auth) ===
+  if (d->strcmp(route, "/api/record_view") == 0 &&
+      d->strcmp(method, "POST") == 0) {
+    return handle_api_record_view(d, d->appserverrequest);
   }
 
   // === API routes (no lang prefix) ===
@@ -2676,7 +2729,50 @@ appjson *load_author(appdeps *d, const char *lang_db_path, const char *author_id
   return data;
 }
 
-void record_view(appdeps *d, const char *lang_db_path, const char *date, const char *id) {
+// ===============================VIEW METRICS API==============================
+const appserverresponse *handle_api_record_view(appdeps *d,
+                                                const appserverrequest *req) {
+  const appjson *body = d->read_server_json(req, 4096);
+  if (!body) {
+    return d->send_text("Invalid JSON body", "text/plain", 400);
+  }
+
+  const char *date = d->json_get_string_value(d->json_get_object_item(body, "date"));
+  const char *id = d->json_get_string_value(d->json_get_object_item(body, "id"));
+  const char *lang = d->json_get_string_value(d->json_get_object_item(body, "lang"));
+  const char *language = d->json_get_string_value(d->json_get_object_item(body, "language"));
+  const char *device = d->json_get_string_value(d->json_get_object_item(body, "device"));
+  const char *country = d->json_get_string_value(d->json_get_object_item(body, "country"));
+  double duration = 0;
+  appjson *dur_item = d->json_get_object_item(body, "duration");
+  if (dur_item && d->json_is_number(dur_item)) {
+    duration = d->json_get_number_value(dur_item);
+  }
+
+  if (!date || !id) {
+    d->json_delete((appjson *)body);
+    return d->send_text("Missing date or id", "text/plain", 400);
+  }
+
+  // Use provided lang or default to "en"
+  const char *db_lang = lang ? lang : "en";
+  char *lang_db_path = d->concat_path(global_config.database_path, db_lang);
+
+  // Fallback to "en" if lang dir doesn't exist
+  if (!d->dir_exists(lang_db_path)) {
+    d->free(lang_db_path);
+    lang_db_path = d->concat_path(global_config.database_path, "en");
+  }
+
+  record_view(d, lang_db_path, date, id, language, device, country, duration);
+
+  d->free(lang_db_path);
+  d->json_delete((appjson *)body);
+  return d->send_text("OK", "text/plain", 200);
+}
+
+void record_view(appdeps *d, const char *lang_db_path, const char *date, const char *id,
+                 const char *language, const char *device, const char *country, double duration) {
   // 1. Setup paths
   char *metrics_root = d->concat_path(lang_db_path, "metrics");
   char *art_metrics = d->concat_path(metrics_root, "articles");
@@ -2739,9 +2835,10 @@ void record_view(appdeps *d, const char *lang_db_path, const char *date, const c
   char iso_buf[64];
   d->get_formatted_time(now, iso_buf, 64, "%Y-%m-%dT%H:%M:%SZ");
   d->json_add_string_to_object(view, "date", iso_buf);
-  d->json_add_string_to_object(view, "country", "unknown");
-  d->json_add_string_to_object(view, "device", "unknown");
-  d->json_add_number_to_object(view, "duration", 0);
+  d->json_add_string_to_object(view, "language", language ? language : "unknown");
+  d->json_add_string_to_object(view, "device", device ? device : "unknown");
+  d->json_add_string_to_object(view, "country", country ? country : "unknown");
+  d->json_add_number_to_object(view, "duration", duration);
 
   int rnd = d->get_random();
   char fname[64];
