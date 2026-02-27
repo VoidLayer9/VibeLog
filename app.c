@@ -1237,6 +1237,16 @@ const appserverresponse *router(appdeps *d, void *props) {
       // Set current_lang for handlers
       current_lang = d->strdup(lang);
 
+      // If database/<lang> dir does not exist, fallback to "en"
+      {
+        char *lang_check_path = d->concat_path(global_config.database_path, current_lang);
+        if (!d->dir_exists(lang_check_path)) {
+          d->free(current_lang);
+          current_lang = d->strdup("en");
+        }
+        d->free(lang_check_path);
+      }
+
       // Invalidate cache per request (so lang switch works correctly)
       if (cached_categories) {
         d->json_delete(cached_categories);
