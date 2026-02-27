@@ -386,12 +386,12 @@ void record_page_view(appdeps *d, const char *page_id, int chunk, int size,
                       const char *category, const char *search);
 
 // ===============================MARKDOWN CONTENT==============================
-// Loads article HTML content. If a .md file exists and a markdown converter
-// is configured, converts it to HTML with caching. Falls back to en.html.
-// Caller must free the returned string.
-char *load_article_content(appdeps *d, const char *content_dir) {
+// Loads article HTML content. If a content.md file exists and a markdown
+// converter is configured, converts it to HTML with caching. Falls back to
+// content.html. Caller must free the returned string.
+char *load_article_content(appdeps *d, const char *article_dir) {
   if (global_config.markdown_converter_command && global_config.cache_dir) {
-    char *md_path = d->concat_path(content_dir, "en.md");
+    char *md_path = d->concat_path(article_dir, "content.md");
     if (d->file_exists(md_path)) {
       char *sha = d->get_cached_file_sha(global_config.cache_dir, md_path);
       if (sha) {
@@ -426,7 +426,7 @@ char *load_article_content(appdeps *d, const char *content_dir) {
         d->free(md_path);
         if (content)
           return content;
-        // If conversion failed, fall through to en.html
+        // If conversion failed, fall through to content.html
       } else {
         d->free(md_path);
       }
@@ -435,7 +435,7 @@ char *load_article_content(appdeps *d, const char *content_dir) {
     }
   }
 
-  char *html_path = d->concat_path(content_dir, "en.html");
+  char *html_path = d->concat_path(article_dir, "content.html");
   char *content = d->read_string(html_path);
   d->free(html_path);
   return content;
@@ -508,9 +508,8 @@ const appserverresponse *handle_article(appdeps *d,
   d->ctext_append(t, date);
   d->ctext_append(t, "</div>");
 
-  // Content (en.md with markdown conversion if configured, else en.html)
-  char *content_dir = d->concat_path(path, "content");
-  char *html_content = load_article_content(d, content_dir);
+  // Content (content.md with markdown conversion if configured, else content.html)
+  char *html_content = load_article_content(d, path);
 
   if (html_content) {
     d->ctext_append(t, "<div class='article-body' style='line-height:1.8'>");
@@ -522,7 +521,6 @@ const appserverresponse *handle_article(appdeps *d,
     d->ctext_append(t, global_text.content_unavailable_text);
     d->ctext_append(t, "</p>");
   }
-  d->free(content_dir);
 
   // Author
   const char *author_id =
