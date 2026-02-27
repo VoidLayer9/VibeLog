@@ -1106,6 +1106,18 @@ const appserverresponse *router(appdeps *d, void *props) {
     return handle_about(d, d->appserverrequest);
   }
 
+  if (d->strcmp(route, "/api/changelog") == 0 &&
+      d->strcmp(method, "GET") == 0) {
+    long asset_size = 0;
+    appbool is_binary = app_false;
+    const unsigned char *meta_content =
+        d->get_asset_content("meta.json", &asset_size, &is_binary);
+    if (meta_content) {
+      return d->send_any(meta_content, asset_size, "application/json", 200);
+    }
+    return d->send_text("{}", "application/json", 200);
+  }
+
   // API
   if (d->strncmp(route, "/api/", 5) == 0 && d->strcmp(method, "POST") == 0) {
     if (d->strcmp(route, "/api/write_database_file") == 0)
@@ -1595,6 +1607,35 @@ int appmain(appdeps *d) {
     const char *arg1 = d->get_arg_value(d->argv, 1);
     if (arg1 && d->strlen(arg1) > 0 && arg1[0] != '-') {
       command = arg1;
+    }
+  }
+
+  // VERSION: --version flag or version command
+  {
+    const char *VERSION_FLAGS[] = {"version"};
+    appbool is_version_flag = d->has_arg_flag(d->argv, VERSION_FLAGS, 1);
+    if (is_version_flag || (command && d->strcmp(command, "version") == 0)) {
+      long asset_size = 0;
+      appbool is_binary = app_false;
+      const unsigned char *meta_content =
+          d->get_asset_content("meta.json", &asset_size, &is_binary);
+      if (meta_content) {
+        char *meta_str = d->malloc(asset_size + 1);
+        d->custom_memcpy(meta_str, meta_content, asset_size);
+        meta_str[asset_size] = 0;
+        appjson *meta_json = d->json_parse(meta_str);
+        d->free(meta_str);
+        if (meta_json) {
+          appjson *version_item =
+              d->json_get_object_item(meta_json, "version");
+          if (version_item) {
+            char *version_str = d->json_get_string_value(version_item);
+            d->printf("VibeLog %s\n", version_str);
+          }
+          d->json_delete(meta_json);
+        }
+      }
+      return 0;
     }
   }
 
