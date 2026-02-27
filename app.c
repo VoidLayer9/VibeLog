@@ -2490,7 +2490,7 @@ appjson *calculate_stats(appdeps *d, const char *lang_db_path) {
   double total_views = 0;
 
   // Add Page Views
-  char *metrics_root = d->concat_path(global_config.database_path, "metrics");
+  char *metrics_root = d->concat_path(lang_db_path, "metrics");
   char *pages_metrics = d->concat_path(metrics_root, "pages");
   d->free(metrics_root);
 
@@ -2571,7 +2571,7 @@ appjson *calculate_stats(appdeps *d, const char *lang_db_path) {
             d->free(json_path);
 
             // 2. Get Views
-            char *mr = d->concat_path(global_config.database_path, "metrics");
+            char *mr = d->concat_path(lang_db_path, "metrics");
             char *art_metrics = d->concat_path(mr, "articles");
             d->free(mr);
             char *m_date_dir = d->concat_path(art_metrics, date_str);
@@ -2714,11 +2714,11 @@ void record_view(appdeps *d, const char *lang_db_path, const char *date, const c
 
   long now = d->get_unix_time();
   char date_buf[64];
-  d->get_formatted_time(now, date_buf, 64, "%Y/%m/%d");
+  d->get_formatted_time(now, date_buf, 64, "%Y-%m-%d");
 
   char day_dir_name[128];
-  d->custom_sprintf(day_dir_name, "%s:%ld", date_buf,
-                    now); // Just use current TS
+  d->custom_sprintf(day_dir_name, "%s_%ld", date_buf,
+                    now); // Use underscore, not colon
 
   char *day_path = d->concat_path(views_dir, day_dir_name);
   if (!d->dir_exists(day_path))
@@ -2796,10 +2796,10 @@ void record_page_view(appdeps *d, const char *lang_db_path, const char *page_id,
 
   long now = d->get_unix_time();
   char date_buf[64];
-  d->get_formatted_time(now, date_buf, 64, "%Y/%m/%d");
+  d->get_formatted_time(now, date_buf, 64, "%Y-%m-%d");
 
   char day_dir_name[128];
-  d->custom_sprintf(day_dir_name, "%s:%ld", date_buf, now);
+  d->custom_sprintf(day_dir_name, "%s_%ld", date_buf, now);
 
   char *day_path = d->concat_path(views_dir, day_dir_name);
   if (!d->dir_exists(day_path))

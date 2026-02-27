@@ -12,7 +12,7 @@ dependencies
 
 test_local_db
 a.out
-*/metrics
+metrics
 start.sh
 CORTEX.md
 vibelog
