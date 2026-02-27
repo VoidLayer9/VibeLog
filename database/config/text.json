@@ -1,0 +1,18 @@
+{
+    "latest_articles": "Latest Articles",
+    "latest_articles_description": "Latest Articles",
+    "about": "About",
+    "about_description": "About",
+    "contact": "Contact",
+    "contact_description": "Contact",
+    "archive": "Archive",
+    "archive_description": "Archive",
+    "search": "Search",
+    "search_description": "Search",
+    "home": "Home",
+    "home_description": "Home",
+    "all_views":"Network Status",
+    "sections_views":"Traffic / Sector",
+    "next_article":"Next",
+    "previous_article":"Previous"
+}
