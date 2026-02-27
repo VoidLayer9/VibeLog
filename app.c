@@ -1204,6 +1204,7 @@ const appserverresponse *handle_favicon(appdeps *d,
 
 const appserverresponse *router(appdeps *d, void *props) {
   const char *route = d->get_server_route(d->appserverrequest);
+  d->printf("Route: %s\n", route);
   const char *method = d->get_server_method(d->appserverrequest);
 
   // === Root redirect: GET / -> 302 /en/ ===
@@ -2750,7 +2751,6 @@ const appserverresponse *handle_api_record_view(appdeps *d,
   }
 
   if (!date || !id) {
-    d->json_delete((appjson *)body);
     return d->send_text("Missing date or id", "text/plain", 400);
   }
 
@@ -2767,7 +2767,6 @@ const appserverresponse *handle_api_record_view(appdeps *d,
   record_view(d, lang_db_path, date, id, language, device, country, duration);
 
   d->free(lang_db_path);
-  d->json_delete((appjson *)body);
   return d->send_text("OK", "text/plain", 200);
 }
 
