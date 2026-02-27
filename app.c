@@ -335,8 +335,37 @@ typedef struct {
 
 VibeLogConfig global_config = {0};
 
+// ===============================VIBELOG TEXT CONFIG==========================
+typedef struct {
+  const char *blog_name;
+  const char *logo_text;
+  const char *categories_dropdown_label;
+  const char *search_placeholder;
+  const char *sidebar_status_title;
+  const char *sidebar_total_views_label;
+  const char *sidebar_traffic_title;
+  const char *footer_text;
+  const char *home_page_title;
+  const char *articles_page_title;
+  const char *filter_by_label;
+  const char *clear_filter_label;
+  const char *no_articles_text;
+  const char *pagination_prev_label;
+  const char *pagination_next_label;
+  const char *published_on_label;
+  const char *content_unavailable_text;
+  const char *view_profile_label;
+  const char *recent_articles_by_label;
+  const char *no_author_articles_text;
+  const char *about_page_title;
+  const char *about_fallback_content;
+} VibeLogText;
+
+VibeLogText global_text = {0};
+
 // cache
 appjson *cached_categories = app_null;
+appjson *cached_text_config = app_null;
 
 // ===============================HELPER PROTOTYPES=============================
 const char *get_mime_type(appdeps *d, const char *path);
@@ -348,6 +377,7 @@ appbool is_safe_path(appdeps *d, const char *path) {
 }
 char *render_page(appdeps *d, const char *title, const char *content);
 void load_global_data(appdeps *d);
+void load_text_config(appdeps *d);
 appjson *load_articles(appdeps *d, int page, int limit, const char *category,
                        const char *search, const char *author_id);
 appjson *load_author(appdeps *d, const char *author_id);
@@ -414,6 +444,7 @@ char *load_article_content(appdeps *d, const char *content_dir) {
 // ===============================HANDLERS======================================
 const appserverresponse *handle_article(appdeps *d,
                                         const appserverrequest *req) {
+  load_text_config(d);
   const char *date = d->get_server_query_param(req, "date");
   const char *id = d->get_server_query_param(req, "id");
 
@@ -472,7 +503,8 @@ const appserverresponse *handle_article(appdeps *d,
   }
 
   d->ctext_append(t, "<div class='article-meta' style='margin-bottom:2rem; "
-                     "color:#71717a;'>Published on ");
+                     "color:#71717a;'>");
+  d->ctext_append(t, global_text.published_on_label);
   d->ctext_append(t, date);
   d->ctext_append(t, "</div>");
 
@@ -486,7 +518,9 @@ const appserverresponse *handle_article(appdeps *d,
     d->ctext_append(t, "</div>");
     d->free(html_content);
   } else {
-    d->ctext_append(t, "<p>Content not available.</p>");
+    d->ctext_append(t, "<p>");
+    d->ctext_append(t, global_text.content_unavailable_text);
+    d->ctext_append(t, "</p>");
   }
   d->free(content_dir);
 
@@ -523,7 +557,9 @@ const appserverresponse *handle_article(appdeps *d,
       d->ctext_append(t, author_id);
       d->ctext_append(t,
                       "' class='btn' style='font-size:0.7rem; padding:0.2rem "
-                      "0.5rem; margin-top:0.5rem;'>View Profile</a></div>");
+                      "0.5rem; margin-top:0.5rem;'>");
+      d->ctext_append(t, global_text.view_profile_label);
+      d->ctext_append(t, "</a></div>");
 
       d->ctext_append(t, "</div>");
       d->json_delete(author);
@@ -545,6 +581,7 @@ const appserverresponse *handle_article(appdeps *d,
 }
 const appserverresponse *handle_author(appdeps *d,
                                        const appserverrequest *req) {
+  load_global_data(d);
   const char *id = d->get_server_query_param(req, "id");
   if (!id)
     return d->send_text("Missing author id", "text/plain", 400);
@@ -581,7 +618,8 @@ const appserverresponse *handle_author(appdeps *d,
   d->ctext_append(t, desc);
   d->ctext_append(t, "</p></div>");
 
-  d->ctext_append(t, "<h2>Recent Articles by ");
+  d->ctext_append(t, "<h2>");
+  d->ctext_append(t, global_text.recent_articles_by_label);
   d->ctext_append(t, name);
   d->ctext_append(t, "</h2>");
 
@@ -589,7 +627,9 @@ const appserverresponse *handle_author(appdeps *d,
   appjson *articles = load_articles(d, 1, 20, app_null, app_null, id);
 
   if (d->json_get_array_size(articles) == 0) {
-    d->ctext_append(t, "<p>No articles found.</p>");
+    d->ctext_append(t, "<p>");
+    d->ctext_append(t, global_text.no_author_articles_text);
+    d->ctext_append(t, "</p>");
   } else {
     int count = d->json_get_array_size(articles);
     for (int i = 0; i < count; i++) {
@@ -626,6 +666,7 @@ const appserverresponse *handle_author(appdeps *d,
 }
 
 const appserverresponse *handle_about(appdeps *d, const appserverrequest *req) {
+  load_global_data(d);
   char *path = d->concat_path(global_config.database_path, "pages");
   char *about_path = d->concat_path(path, "about.html");
   d->free(path);
@@ -637,8 +678,8 @@ const appserverresponse *handle_about(appdeps *d, const appserverrequest *req) {
   d->free(about_path);
 
   char *full_html = render_page(
-      d, "About",
-      content ? content : "<h1>About</h1><p>Content to be added.</p>");
+      d, global_text.about_page_title,
+      content ? content : global_text.about_fallback_content);
   if (content)
     d->free(content);
 
@@ -697,7 +738,8 @@ render_article_list_response(appdeps *d, const char *title, int page, int limit,
 
   // Filter info
   if (category || search) {
-    d->ctext_append(t, "<div class='filter-info'>Filtering by: ");
+    d->ctext_append(t, "<div class='filter-info'>");
+    d->ctext_append(t, global_text.filter_by_label);
     if (category) {
       d->ctext_append(t, "<span class='badge'>");
       d->ctext_append(t, category);
@@ -708,14 +750,16 @@ render_article_list_response(appdeps *d, const char *title, int page, int limit,
       d->ctext_append(t, search);
       d->ctext_append(t, "\"");
     }
-    d->ctext_append(
-        t, " <a href='/list_articles' class='btn' style='padding:0.2rem "
-           "0.5rem; margin-left:1rem; font-size:0.7rem'>Clear</a></div><br>");
+    d->ctext_append(t, " <a href='/list_articles' class='btn' style='padding:0.2rem "
+           "0.5rem; margin-left:1rem; font-size:0.7rem'>");
+    d->ctext_append(t, global_text.clear_filter_label);
+    d->ctext_append(t, "</a></div><br>");
   }
 
   if (d->json_get_array_size(articles) == 0) {
-    d->ctext_append(t, "<div class='card'><div class='card-title'>No articles "
-                       "found</div></div>");
+    d->ctext_append(t, "<div class='card'><div class='card-title'>");
+    d->ctext_append(t, global_text.no_articles_text);
+    d->ctext_append(t, "</div></div>");
   } else {
     int count = d->json_get_array_size(articles);
     for (int i = 0; i < count; i++) {
@@ -788,7 +832,9 @@ render_article_list_response(appdeps *d, const char *title, int page, int limit,
       d->ctext_append(t, "&search=");
       d->ctext_append(t, search);
     }
-    d->ctext_append(t, "' class='btn'>Previous</a>");
+    d->ctext_append(t, "' class='btn'>");
+    d->ctext_append(t, global_text.pagination_prev_label);
+    d->ctext_append(t, "</a>");
   }
 
   // We don't know total/next without loading all, but load_articles pagination
@@ -810,7 +856,9 @@ render_article_list_response(appdeps *d, const char *title, int page, int limit,
       d->ctext_append(t, "&search=");
       d->ctext_append(t, search);
     }
-    d->ctext_append(t, "' class='btn'>Next</a>");
+    d->ctext_append(t, "' class='btn'>");
+    d->ctext_append(t, global_text.pagination_next_label);
+    d->ctext_append(t, "</a>");
   }
   d->ctext_append(t, "</div>");
 
@@ -827,8 +875,8 @@ const appserverresponse *handle_home(appdeps *d, const appserverrequest *req) {
   load_global_data(d);
   record_page_view(d, "home", 1, 10, app_null, app_null);
   // Home behaves like list_articles with default params (page=1, limit=10)
-  return render_article_list_response(d, "Latest Articles", 1, 10, app_null,
-                                      app_null);
+  return render_article_list_response(d, global_text.home_page_title, 1, 10,
+                                      app_null, app_null);
 }
 
 const appserverresponse *handle_list_articles(appdeps *d,
@@ -857,8 +905,8 @@ const appserverresponse *handle_list_articles(appdeps *d,
 
   record_page_view(d, "listings", page, limit, category, search);
 
-  return render_article_list_response(d, "Articles", page, limit, category,
-                                      search);
+  return render_article_list_response(d, global_text.articles_page_title, page,
+                                      limit, category, search);
 }
 
 // =======================MANAGEMENT API========================================
@@ -1817,7 +1865,67 @@ const char *get_mime_type(appdeps *d, const char *path) {
   return "application/octet-stream";
 }
 
+void load_text_config(appdeps *d) {
+  if (cached_text_config != app_null)
+    return;
+  char *path =
+      d->concat_path(global_config.database_path, "config/text.json");
+  if (d->file_exists(path)) {
+    cached_text_config = d->json_parse_file(path);
+  } else {
+    cached_text_config = d->json_create_object();
+  }
+  d->free(path);
+
+  appjson *item;
+  item = d->json_get_object_item(cached_text_config, "blog_name");
+  global_text.blog_name = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "VibeLog";
+  item = d->json_get_object_item(cached_text_config, "logo_text");
+  global_text.logo_text = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "VIBELOG_";
+  item = d->json_get_object_item(cached_text_config, "categories_dropdown_label");
+  global_text.categories_dropdown_label = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "Categories \xe2\x96\xbe";
+  item = d->json_get_object_item(cached_text_config, "search_placeholder");
+  global_text.search_placeholder = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "Search...";
+  item = d->json_get_object_item(cached_text_config, "sidebar_status_title");
+  global_text.sidebar_status_title = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "Network Status";
+  item = d->json_get_object_item(cached_text_config, "sidebar_total_views_label");
+  global_text.sidebar_total_views_label = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "Total Views";
+  item = d->json_get_object_item(cached_text_config, "sidebar_traffic_title");
+  global_text.sidebar_traffic_title = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "Traffic / Sector";
+  item = d->json_get_object_item(cached_text_config, "footer_text");
+  global_text.footer_text = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "VIBELOG SYSTEM \xc2\xa9 2026 // NO RIGHTS RESERVED";
+  item = d->json_get_object_item(cached_text_config, "home_page_title");
+  global_text.home_page_title = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "Latest Articles";
+  item = d->json_get_object_item(cached_text_config, "articles_page_title");
+  global_text.articles_page_title = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "Articles";
+  item = d->json_get_object_item(cached_text_config, "filter_by_label");
+  global_text.filter_by_label = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "Filtering by: ";
+  item = d->json_get_object_item(cached_text_config, "clear_filter_label");
+  global_text.clear_filter_label = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "Clear";
+  item = d->json_get_object_item(cached_text_config, "no_articles_text");
+  global_text.no_articles_text = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "No articles found";
+  item = d->json_get_object_item(cached_text_config, "pagination_prev_label");
+  global_text.pagination_prev_label = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "Previous";
+  item = d->json_get_object_item(cached_text_config, "pagination_next_label");
+  global_text.pagination_next_label = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "Next";
+  item = d->json_get_object_item(cached_text_config, "published_on_label");
+  global_text.published_on_label = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "Published on ";
+  item = d->json_get_object_item(cached_text_config, "content_unavailable_text");
+  global_text.content_unavailable_text = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "Content not available.";
+  item = d->json_get_object_item(cached_text_config, "view_profile_label");
+  global_text.view_profile_label = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "View Profile";
+  item = d->json_get_object_item(cached_text_config, "recent_articles_by_label");
+  global_text.recent_articles_by_label = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "Recent Articles by ";
+  item = d->json_get_object_item(cached_text_config, "no_author_articles_text");
+  global_text.no_author_articles_text = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "No articles found.";
+  item = d->json_get_object_item(cached_text_config, "about_page_title");
+  global_text.about_page_title = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "About";
+  item = d->json_get_object_item(cached_text_config, "about_fallback_content");
+  global_text.about_fallback_content = (item && d->json_is_string(item)) ? d->json_get_string_value(item) : "<h1>About</h1><p>Content to be added.</p>";
+}
+
 void load_global_data(appdeps *d) {
+  load_text_config(d);
   if (cached_categories == app_null) {
     char *path =
         d->concat_path(global_config.database_path, "config/categorys.json");
@@ -1845,7 +1953,8 @@ char *render_page(appdeps *d, const char *title, const char *content) {
     d->ctext_append(t, title);
     d->ctext_append(t, " - ");
   }
-  d->ctext_append(t, "VibeLog</title>");
+  d->ctext_append(t, global_text.blog_name);
+  d->ctext_append(t, "</title>");
 
   // Fonts
   d->ctext_append(
@@ -1867,7 +1976,9 @@ char *render_page(appdeps *d, const char *title, const char *content) {
   // NAVBAR
   d->ctext_append(t,
                   "<nav class='navbar'><div class='container navbar-content'>");
-  d->ctext_append(t, "<a href='/' class='logo'>VIBELOG_</a>");
+  d->ctext_append(t, "<a href='/' class='logo'>");
+  d->ctext_append(t, global_text.logo_text);
+  d->ctext_append(t, "</a>");
 
   d->ctext_append(t, "<div class='nav-links'>");
 
@@ -1893,8 +2004,9 @@ char *render_page(appdeps *d, const char *title, const char *content) {
   }
 
   // Categories Dropdown
-  d->ctext_append(t, "<div class='dropdown'><button class='btn'>Categories "
-                     "▾</button><div class='dropdown-content'>");
+  d->ctext_append(t, "<div class='dropdown'><button class='btn'>");
+  d->ctext_append(t, global_text.categories_dropdown_label);
+  d->ctext_append(t, "</button><div class='dropdown-content'>");
   if (cached_categories && d->json_is_array(cached_categories)) {
     int count = d->json_get_array_size(cached_categories);
     for (int i = 0; i < count; i++) {
@@ -1921,8 +2033,9 @@ char *render_page(appdeps *d, const char *title, const char *content) {
   // Search
   d->ctext_append(
       t, "<form action='/list_articles' method='GET' class='search-form'>");
-  d->ctext_append(t, "<input type='text' name='search' placeholder='Search...' "
-                     "class='search-input'>");
+  d->ctext_append(t, "<input type='text' name='search' placeholder='");
+  d->ctext_append(t, global_text.search_placeholder);
+  d->ctext_append(t, "' class='search-input'>");
   d->ctext_append(t, "</form>");
 
   d->ctext_append(t, "</div></nav>"); // Close container, close nav
@@ -1942,13 +2055,16 @@ char *render_page(appdeps *d, const char *title, const char *content) {
   appjson *stats = calculate_stats(d);
 
   d->ctext_append(t, "<div class='sidebar-section'>");
-  d->ctext_append(t, "<h3 class='sidebar-title'>Network Status</h3>");
+  d->ctext_append(t, "<h3 class='sidebar-title'>");
+  d->ctext_append(t, global_text.sidebar_status_title);
+  d->ctext_append(t, "</h3>");
 
   // Total Views
   double total_views =
       d->json_get_number_value(d->json_get_object_item(stats, "total_views"));
-  d->ctext_append(t, "<div class='stat-item'><span class='stat-label'>Total "
-                     "Views</span><span class='stat-value'>");
+  d->ctext_append(t, "<div class='stat-item'><span class='stat-label'>");
+  d->ctext_append(t, global_text.sidebar_total_views_label);
+  d->ctext_append(t, "</span><span class='stat-value'>");
   char tv_buf[64];
   d->custom_sprintf(tv_buf, "%.0f", total_views);
   d->ctext_append(t, tv_buf);
@@ -1958,7 +2074,9 @@ char *render_page(appdeps *d, const char *title, const char *content) {
 
   // Categories Stats
   d->ctext_append(t, "<div class='sidebar-section'>");
-  d->ctext_append(t, "<h3 class='sidebar-title'>Traffic / Sector</h3>");
+  d->ctext_append(t, "<h3 class='sidebar-title'>");
+  d->ctext_append(t, global_text.sidebar_traffic_title);
+  d->ctext_append(t, "</h3>");
 
   appjson *cats = d->json_get_object_item(stats, "categories");
   if (cats && d->json_is_array(cats)) {
@@ -1989,7 +2107,7 @@ char *render_page(appdeps *d, const char *title, const char *content) {
 
   // Footer
   d->ctext_append(t, "<footer class='footer'><div class='container'>");
-  d->ctext_append(t, "VIBELOG SYSTEM © 2026 // NO RIGHTS RESERVED");
+  d->ctext_append(t, global_text.footer_text);
   d->ctext_append(t, "</div></footer>");
 
   d->ctext_append(t, "</body></html>");
