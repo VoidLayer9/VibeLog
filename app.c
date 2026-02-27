@@ -594,9 +594,25 @@ const appserverresponse *handle_article(appdeps *d,
   d->ctext_append(t, "return 'desktop';}");
   d->ctext_append(t, "function _vl_country(){");
   d->ctext_append(t, "try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone;");
-  d->ctext_append(t, "var m={'America':'US','Europe':'EU','Asia':'AS','Africa':'AF','Australia':'AU','Pacific':'OC','Antarctica':'AQ'};");
-  d->ctext_append(t, "var r=tz.split('/')[0];");
-  d->ctext_append(t, "return m[r]||'unknown';");
+  d->ctext_append(t, "var m={");
+  d->ctext_append(t, "'America/New_York':'US','America/Chicago':'US','America/Denver':'US','America/Los_Angeles':'US','America/Anchorage':'US','America/Phoenix':'US','America/Detroit':'US','America/Indiana':'US',");
+  d->ctext_append(t, "'America/Sao_Paulo':'BR','America/Fortaleza':'BR','America/Bahia':'BR','America/Belem':'BR','America/Manaus':'BR','America/Recife':'BR','America/Cuiaba':'BR','America/Campo_Grande':'BR','America/Araguaina':'BR','America/Maceio':'BR',");
+  d->ctext_append(t, "'America/Argentina/Buenos_Aires':'AR','America/Argentina/Cordoba':'AR','America/Argentina/Mendoza':'AR',");
+  d->ctext_append(t, "'America/Santiago':'CL','America/Bogota':'CO','America/Lima':'PE','America/Caracas':'VE','America/Guayaquil':'EC',");
+  d->ctext_append(t, "'America/Mexico_City':'MX','America/Cancun':'MX','America/Monterrey':'MX','America/Tijuana':'MX',");
+  d->ctext_append(t, "'America/Toronto':'CA','America/Vancouver':'CA','America/Edmonton':'CA','America/Halifax':'CA','America/Winnipeg':'CA',");
+  d->ctext_append(t, "'America/Montevideo':'UY','America/Asuncion':'PY','America/La_Paz':'BO','America/Havana':'CU','America/Panama':'PA','America/Costa_Rica':'CR','America/Guatemala':'GT',");
+  d->ctext_append(t, "'Europe/London':'GB','Europe/Paris':'FR','Europe/Berlin':'DE','Europe/Madrid':'ES','Europe/Rome':'IT','Europe/Amsterdam':'NL','Europe/Brussels':'BE','Europe/Zurich':'CH','Europe/Vienna':'AT',");
+  d->ctext_append(t, "'Europe/Lisbon':'PT','Europe/Warsaw':'PL','Europe/Prague':'CZ','Europe/Budapest':'HU','Europe/Bucharest':'RO','Europe/Sofia':'BG','Europe/Athens':'GR','Europe/Helsinki':'FI',");
+  d->ctext_append(t, "'Europe/Stockholm':'SE','Europe/Oslo':'NO','Europe/Copenhagen':'DK','Europe/Dublin':'IE','Europe/Moscow':'RU','Europe/Kiev':'UA','Europe/Istanbul':'TR',");
+  d->ctext_append(t, "'Asia/Tokyo':'JP','Asia/Shanghai':'CN','Asia/Chongqing':'CN','Asia/Hong_Kong':'HK','Asia/Seoul':'KR','Asia/Kolkata':'IN','Asia/Calcutta':'IN','Asia/Mumbai':'IN',");
+  d->ctext_append(t, "'Asia/Singapore':'SG','Asia/Bangkok':'TH','Asia/Jakarta':'ID','Asia/Manila':'PH','Asia/Taipei':'TW','Asia/Dubai':'AE','Asia/Riyadh':'SA','Asia/Tehran':'IR','Asia/Karachi':'PK',");
+  d->ctext_append(t, "'Asia/Dhaka':'BD','Asia/Colombo':'LK','Asia/Kuala_Lumpur':'MY','Asia/Ho_Chi_Minh':'VN','Asia/Saigon':'VN',");
+  d->ctext_append(t, "'Africa/Cairo':'EG','Africa/Lagos':'NG','Africa/Johannesburg':'ZA','Africa/Nairobi':'KE','Africa/Casablanca':'MA','Africa/Algiers':'DZ','Africa/Tunis':'TN',");
+  d->ctext_append(t, "'Australia/Sydney':'AU','Australia/Melbourne':'AU','Australia/Brisbane':'AU','Australia/Perth':'AU','Australia/Adelaide':'AU',");
+  d->ctext_append(t, "'Pacific/Auckland':'NZ','Pacific/Fiji':'FJ','Pacific/Honolulu':'US'");
+  d->ctext_append(t, "};");
+  d->ctext_append(t, "return m[tz]||'unknown';");
   d->ctext_append(t, "}catch(e){return 'unknown';}}");
   d->ctext_append(t, "function _vl_send(){");
   d->ctext_append(t, "if(_vl_sent)return;");
@@ -2831,9 +2847,7 @@ void record_view(appdeps *d, const char *lang_db_path, const char *date, const c
 
   // View File
   appjson *view = d->json_create_object();
-  char iso_buf[64];
-  d->get_formatted_time(now, iso_buf, 64, "%Y-%m-%dT%H:%M:%SZ");
-  d->json_add_string_to_object(view, "date", iso_buf);
+  d->json_add_number_to_object(view, "date", (double)now);
   d->json_add_string_to_object(view, "language", language ? language : "unknown");
   d->json_add_string_to_object(view, "device", device ? device : "unknown");
   d->json_add_string_to_object(view, "country", country ? country : "unknown");
