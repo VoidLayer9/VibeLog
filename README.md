@@ -87,7 +87,7 @@ Run the blog locally or in production:
 
 ### Markdown Support
 
-VibeLog supports Markdown articles via an external converter command. When configured, article content can be written in `content/en.md` instead of `content/en.html`. VibeLog will convert the Markdown to HTML on demand and cache the result automatically.
+VibeLog supports Markdown articles via an external converter command. When configured, article content can be written in `content.md` instead of `content.html`. VibeLog will convert the Markdown to HTML on demand and cache the result automatically.
 
 **How to enable:**
 
@@ -135,8 +135,8 @@ Articles are stored in `database/articles/YYYY/MM/DD/<article_id>/`.
 
 **Structure:**
 *   `data.json`: Metadata (title, summary, tags).
-*   `content/en.html`: The HTML body of the article.
-*   `content/en.md`: Markdown source (alternative to `en.html`, requires `--markdown-converter-command`).
+*   `content.html`: The HTML body of the article.
+*   `content.md`: Markdown source (alternative to `content.html`, requires `--markdown-converter-command`).
 *   `assets/thumbnail.jpg`: Cover image.
 
 **Example `data.json`:**
@@ -198,7 +198,7 @@ database/
 │           └── DD/
 │               └── <article_id>/
 │                   ├── data.json
-│                   ├── content/en.html
+│                   ├── content.html
 │                   └── assets/thumbnail.jpg
 ├── authors/                # Author profiles
 │   └── <author_id>/
