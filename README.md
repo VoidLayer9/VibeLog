@@ -19,7 +19,7 @@ Designed for "vibecoding" â€” programming with intent and aesthetic precision â€
 
 ### Pre-compiled Binaries (Recommended)
 
-Download the latest pre-compiled version for your platform from the [Releases page](https://github.com/VoidLayer9/VibeLog/releases/tag/0.0.5).
+Download the latest pre-compiled version for your platform from the [Releases page](https://github.com/VoidLayer9/VibeLog/releases/tag/0.0.6).
 
 ### Build from Source
 
