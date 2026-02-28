@@ -1950,20 +1950,79 @@ int appmain(appdeps *d) {
     }
   }
 
+  // HELP: --help flag or help command
+  {
+    const char *HELP_FLAGS[] = {"help", "h"};
+    appbool is_help_flag = d->has_arg_flag(d->argv, HELP_FLAGS, 2);
+    if (is_help_flag || (command && d->strcmp(command, "help") == 0)) {
+      d->printf("VibeLog - Minimalist Blog Engine\n");
+      d->printf("\n");
+      d->printf("Usage:\n");
+      d->printf("  vibelog <command> [options]\n");
+      d->printf("\n");
+      d->printf("Commands:\n");
+      d->printf("  start               Start the HTTP server\n");
+      d->printf("  upload-articles     Upload articles to a remote instance\n");
+      d->printf(
+          "  download-articles   Download articles from a remote instance\n");
+      d->printf("  upload-authors      Upload authors to a remote instance\n");
+      d->printf(
+          "  download-authors    Download authors from a remote instance\n");
+      d->printf("  upload-metrics      Upload metrics to a remote instance\n");
+      d->printf(
+          "  download-metrics    Download metrics from a remote instance\n");
+      d->printf(
+          "  upload-config       Upload config (and about.html) to remote\n");
+      d->printf(
+          "  download-config     Download config from a remote instance\n");
+      d->printf("  version             Show version information\n");
+      d->printf("  help                Show this help message\n");
+      d->printf("\n");
+      d->printf("Options for 'start':\n");
+      d->printf(
+          "  --port, -p <port>                   Server port (default: 8080)\n");
+      d->printf("  --database-path, --db <path>        Path to the database "
+                "directory (default: database)\n");
+      d->printf("  --root-password, --pass <password>  Admin password "
+                "(required)\n");
+      d->printf("  --max-view <number>                 Max view records stored "
+                "per article (required)\n");
+      d->printf("  --markdown-converter-command <cmd>  External command to "
+                "convert markdown (optional)\n");
+      d->printf("\n");
+      d->printf("Options for sync commands (upload-* / download-*):\n");
+      d->printf(
+          "  --url, -u <url>                     Remote instance URL "
+          "(required)\n");
+      d->printf("  --root-password, --pass <password>  Admin password "
+                "(required)\n");
+      d->printf("  --database-path, --db <path>        Local database path "
+                "(default: database)\n");
+      d->printf(
+          "  --cache-dir, -c <path>              Cache directory (default: "
+          ".vibelog_cache)\n");
+      d->printf("\n");
+      d->printf("Global options:\n");
+      d->printf("  --version                           Show version "
+                "information\n");
+      d->printf(
+          "  --help, -h                          Show this help message\n");
+      d->printf("\n");
+      d->printf("Examples:\n");
+      d->printf("  vibelog start --port 8080 --database-path ./database "
+                "--root-password secret --max-view 1000\n");
+      d->printf("  vibelog upload-articles --url http://myserver.com "
+                "--root-password secret\n");
+      d->printf("  vibelog download-articles --url http://myserver.com "
+                "--root-password secret --database-path ./db\n");
+      return 0;
+    }
+  }
+
   // Validate Command
   if (!command) {
     d->printf("Usage: vibelog <command> [options]\n");
-    d->printf("Commands:\n");
-    d->printf("  start              Start the server\n");
-    d->printf("  upload-articles    Upload articles to remote\n");
-    d->printf("  download-articles  Download articles from remote\n");
-    d->printf("  upload-authors     Upload authors to remote\n");
-    d->printf("  download-authors   Download authors from remote\n");
-    d->printf("  upload-metrics     Upload metrics to remote\n");
-    d->printf("  download-metrics   Download metrics from remote\n");
-    d->printf(
-        "  upload-config      Upload config (and about.html) to remote\n");
-    d->printf("  download-config    Download config from remote\n");
+    d->printf("Run 'vibelog help' or 'vibelog --help' for full usage.\n");
     return 1;
   }
 
