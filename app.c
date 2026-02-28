@@ -329,6 +329,7 @@ typedef struct {
   const char *database_path;
   const char *root_password;
   int port;
+  int max_view;
   const char *cache_dir;
   const char *markdown_converter_command;
 } VibeLogConfig;
@@ -2018,6 +2019,27 @@ int appmain(appdeps *d) {
       return 1;
     }
 
+    // Parse Max View
+    const char *MAX_VIEW_FLAGS[] = {"max-view"};
+    const char *max_view_val = d->get_arg_flag_value(
+        d->argv, MAX_VIEW_FLAGS, 1, 0);
+    if (max_view_val) {
+      global_config.max_view = d->atoi(max_view_val);
+      if (global_config.max_view <= 0) {
+        d->printf("Error: --max-view must be a positive integer.\n");
+        d->free(eff_db_path);
+        d->free(eff_cache_dir);
+        d->free((void *)global_config.root_password);
+        return 1;
+      }
+    } else {
+      d->printf("Error: --max-view is required for start command.\n");
+      d->free(eff_db_path);
+      d->free(eff_cache_dir);
+      d->free((void *)global_config.root_password);
+      return 1;
+    }
+
     // Parse Markdown Converter Command
     const char *MARKDOWN_FLAGS[] = {"markdown-converter-command"};
     const char *md_cmd = d->get_arg_flag_value(
@@ -2029,6 +2051,7 @@ int appmain(appdeps *d) {
     }
 
     d->printf("Starting VibeLog on port %d\n", global_config.port);
+    d->printf("Max view records per article/page: %d\n", global_config.max_view);
     d->printf("Database path: %s\n", global_config.database_path);
 
     d->start_server(global_config.port, router, app_null, app_false);
@@ -2868,6 +2891,34 @@ const appserverresponse *handle_api_record_view(appdeps *d,
     lang_db_path = d->concat_path(global_config.database_path, "en");
   }
 
+  // Max-view guard: reject if this article already reached the view limit
+  if (global_config.max_view > 0) {
+    char *metrics_root = d->concat_path(lang_db_path, "metrics");
+    char *art_metrics = d->concat_path(metrics_root, "articles");
+    d->free(metrics_root);
+    char *date_dir = d->concat_path(art_metrics, date);
+    d->free(art_metrics);
+    char *id_dir = d->concat_path(date_dir, id);
+    d->free(date_dir);
+    char *tv_path = d->concat_path(id_dir, "total_views.json");
+    d->free(id_dir);
+
+    if (d->file_exists(tv_path)) {
+      appjson *totals = d->json_parse_file(tv_path);
+      if (totals) {
+        appjson *v_item = d->json_get_object_item(totals, "views");
+        double v = d->json_get_number_value(v_item);
+        d->json_delete(totals);
+        if ((int)v >= global_config.max_view) {
+          d->free(tv_path);
+          d->free(lang_db_path);
+          return d->send_text("Too Many Requests", "text/plain", 429);
+        }
+      }
+    }
+    d->free(tv_path);
+  }
+
   record_view(d, lang_db_path, date, id, language, device, country, duration);
 
   d->free(lang_db_path);
@@ -2913,6 +2964,32 @@ const appserverresponse *handle_api_record_page_view(appdeps *d,
   if (!d->dir_exists(lang_db_path)) {
     d->free(lang_db_path);
     lang_db_path = d->concat_path(global_config.database_path, "en");
+  }
+
+  // Max-view guard: reject if this page already reached the view limit
+  if (global_config.max_view > 0) {
+    char *metrics_root = d->concat_path(lang_db_path, "metrics");
+    char *pages_metrics = d->concat_path(metrics_root, "pages");
+    d->free(metrics_root);
+    char *page_dir = d->concat_path(pages_metrics, page_id);
+    d->free(pages_metrics);
+    char *tv_path = d->concat_path(page_dir, "total_views.json");
+    d->free(page_dir);
+
+    if (d->file_exists(tv_path)) {
+      appjson *totals = d->json_parse_file(tv_path);
+      if (totals) {
+        appjson *v_item = d->json_get_object_item(totals, "views");
+        double v = d->json_get_number_value(v_item);
+        d->json_delete(totals);
+        if ((int)v >= global_config.max_view) {
+          d->free(tv_path);
+          d->free(lang_db_path);
+          return d->send_text("Too Many Requests", "text/plain", 429);
+        }
+      }
+    }
+    d->free(tv_path);
   }
 
   record_page_view(d, lang_db_path, page_id, chunk, size, category, search,

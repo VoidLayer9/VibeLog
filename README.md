@@ -77,11 +77,12 @@ VibeLog includes a CLI for starting the server and managing content synchronizat
 Run the blog locally or in production:
 
 ```bash
-./vibelog start --port 8080 --root-password secret_pass [--database-path ./database]
+./vibelog start --port 8080 --root-password secret_pass --max-view 10000 [--database-path ./database]
 ```
 
 *   `--port`: Port to listen on (default: 8080).
 *   `--root-password`: Admin password for API operations (required).
+*   `--max-view`: Maximum number of view records stored per article or page (required). Once an article or page reaches this limit, additional view tracking requests are rejected with HTTP 429. Prevents DoS attacks from flooding the metrics database with fake views.
 *   `--database-path`: Path to the database folder (optional, default: `./database`).
 *   `--markdown-converter-command`: Command template for converting Markdown to HTML (optional). See [Markdown Support](#markdown-support) below.
 
