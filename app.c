@@ -31,7 +31,7 @@ struct appdeps {
   // FUNCTIONS==============================================
   int (*printf)(const char *format, ...);
   int (*custom_sprintf)(char *str, const char *format, ...);
-  int (*snprintf)(char *str, unsigned long size, const char *format, ...);
+  int (*custom_snprintf)(char *str, unsigned long size, const char *format, ...);
 
   unsigned long (*strlen)(const char *s);
   char *(*custom_strcpy)(char *dst, const char *src);
@@ -405,13 +405,13 @@ char *load_article_content(appdeps *d, const char *article_dir) {
       if (sha) {
         long path_len = d->strlen(global_config.cache_dir) + d->strlen(sha) + 32;
         char *cached_html_path = d->malloc(path_len);
-        d->snprintf(cached_html_path, path_len, "%s/markdown_cache/%s.html",
+        d->custom_snprintf(cached_html_path, path_len, "%s/markdown_cache/%s.html",
                     global_config.cache_dir, sha);
 
         if (!d->file_exists(cached_html_path)) {
           long dir_len = d->strlen(global_config.cache_dir) + 32;
           char *md_cache_dir = d->malloc(dir_len);
-          d->snprintf(md_cache_dir, dir_len, "%s/markdown_cache",
+          d->custom_snprintf(md_cache_dir, dir_len, "%s/markdown_cache",
                       global_config.cache_dir);
           if (!d->dir_exists(md_cache_dir)) {
             d->create_dir(md_cache_dir);

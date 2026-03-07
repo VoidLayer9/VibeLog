@@ -13,7 +13,7 @@ appdeps global_appdeps = {
     // Standard library functions
     .printf = printf,
     .custom_sprintf = wrapper_sprintf,
-    .snprintf = wrapper_snprintf,
+    .custom_snprintf = wrapper_snprintf,
     .strlen = wrapper_strlen,
     .custom_strcpy = wrapper_strcpy,
     .custom_strcat = wrapper_strcat,
