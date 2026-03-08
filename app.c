@@ -496,7 +496,8 @@ const appserverresponse *handle_article(appdeps *d,
       else if (d->strstr(ua, "iPad") || d->strstr(ua, "Tablet"))
         device = "tablet";
     }
-    record_view(d, lang_db_path, date, id, "unknown", device, "unknown", 0);
+    const char *accept_lang = d->get_server_header(req, "Accept-Language");
+    record_view(d, lang_db_path, date, id, accept_lang ? accept_lang : "unknown", device, "unknown", 0);
   }
 
   // Wrapper for content
@@ -930,7 +931,8 @@ const appserverresponse *handle_home(appdeps *d, const appserverrequest *req) {
       else if (d->strstr(ua, "iPad") || d->strstr(ua, "Tablet"))
         device = "tablet";
     }
-    record_page_view(d, lang_db_path, "home", 1, 10, app_null, app_null, "unknown", device, "unknown", 0);
+    const char *accept_lang = d->get_server_header(req, "Accept-Language");
+    record_page_view(d, lang_db_path, "home", 1, 10, app_null, app_null, accept_lang ? accept_lang : "unknown", device, "unknown", 0);
   }
   // Home behaves like list_articles with default params (page=1, limit=10)
   const appserverresponse *resp = render_article_list_response(
@@ -974,7 +976,8 @@ const appserverresponse *handle_list_articles(appdeps *d,
       else if (d->strstr(ua, "iPad") || d->strstr(ua, "Tablet"))
         device = "tablet";
     }
-    record_page_view(d, lang_db_path, "listings", page, limit, category, search, "unknown", device, "unknown", 0);
+    const char *accept_lang = d->get_server_header(req, "Accept-Language");
+    record_page_view(d, lang_db_path, "listings", page, limit, category, search, accept_lang ? accept_lang : "unknown", device, "unknown", 0);
   }
 
   const appserverresponse *resp = render_article_list_response(
@@ -3089,9 +3092,7 @@ void record_page_view(appdeps *d, const char *lang_db_path, const char *page_id,
     d->create_dir(day_path);
 
   appjson *view = d->json_create_object();
-  char iso_buf[64];
-  d->get_formatted_time(now, iso_buf, 64, "%Y-%m-%dT%H:%M:%SZ");
-  d->json_add_string_to_object(view, "date", iso_buf);
+  d->json_add_number_to_object(view, "date", (double)now);
   d->json_add_string_to_object(view, "page", page_id);
   d->json_add_number_to_object(view, "duration", duration);
   d->json_add_number_to_object(view, "chunk", (double)chunk);
