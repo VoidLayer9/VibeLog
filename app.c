@@ -486,6 +486,18 @@ const appserverresponse *handle_article(appdeps *d,
     return d->send_text("Corrupt article data", "text/plain", 500);
   }
 
+  // Server-side view tracking
+  {
+    const char *ua = d->get_server_header(req, "User-Agent");
+    const char *device = "desktop";
+    if (ua) {
+      if (d->strstr(ua, "Mobile") || d->strstr(ua, "Android") || d->strstr(ua, "iPhone"))
+        device = "mobile";
+      else if (d->strstr(ua, "iPad") || d->strstr(ua, "Tablet"))
+        device = "tablet";
+    }
+    record_view(d, lang_db_path, date, id, "unknown", device, "unknown", 0);
+  }
 
   // Wrapper for content
   appctext *t = d->new_ctext(app_null);
@@ -575,69 +587,6 @@ const appserverresponse *handle_article(appdeps *d,
       d->json_delete(author);
     }
   }
-
-  // Client-side view tracking script
-  d->ctext_append(t, "<script>");
-  d->ctext_append(t, "(function(){");
-  d->ctext_append(t, "var _vl_start=Date.now();");
-  d->ctext_append(t, "var _vl_date='");
-  d->ctext_append(t, date);
-  d->ctext_append(t, "';");
-  d->ctext_append(t, "var _vl_id='");
-  d->ctext_append(t, id);
-  d->ctext_append(t, "';");
-  d->ctext_append(t, "var _vl_lang='");
-  d->ctext_append(t, current_lang);
-  d->ctext_append(t, "';");
-  d->ctext_append(t, "var _vl_sent=false;");
-  d->ctext_append(t, "function _vl_device(){");
-  d->ctext_append(t, "var w=screen.width||window.innerWidth;");
-  d->ctext_append(t, "if(w<768)return 'mobile';");
-  d->ctext_append(t, "if(w<1024)return 'tablet';");
-  d->ctext_append(t, "return 'desktop';}");
-  d->ctext_append(t, "function _vl_country(){");
-  d->ctext_append(t, "try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone;");
-  d->ctext_append(t, "var m={");
-  d->ctext_append(t, "'America/New_York':'US','America/Chicago':'US','America/Denver':'US','America/Los_Angeles':'US','America/Anchorage':'US','America/Phoenix':'US','America/Detroit':'US','America/Indiana':'US',");
-  d->ctext_append(t, "'America/Sao_Paulo':'BR','America/Fortaleza':'BR','America/Bahia':'BR','America/Belem':'BR','America/Manaus':'BR','America/Recife':'BR','America/Cuiaba':'BR','America/Campo_Grande':'BR','America/Araguaina':'BR','America/Maceio':'BR',");
-  d->ctext_append(t, "'America/Argentina/Buenos_Aires':'AR','America/Argentina/Cordoba':'AR','America/Argentina/Mendoza':'AR',");
-  d->ctext_append(t, "'America/Santiago':'CL','America/Bogota':'CO','America/Lima':'PE','America/Caracas':'VE','America/Guayaquil':'EC',");
-  d->ctext_append(t, "'America/Mexico_City':'MX','America/Cancun':'MX','America/Monterrey':'MX','America/Tijuana':'MX',");
-  d->ctext_append(t, "'America/Toronto':'CA','America/Vancouver':'CA','America/Edmonton':'CA','America/Halifax':'CA','America/Winnipeg':'CA',");
-  d->ctext_append(t, "'America/Montevideo':'UY','America/Asuncion':'PY','America/La_Paz':'BO','America/Havana':'CU','America/Panama':'PA','America/Costa_Rica':'CR','America/Guatemala':'GT',");
-  d->ctext_append(t, "'Europe/London':'GB','Europe/Paris':'FR','Europe/Berlin':'DE','Europe/Madrid':'ES','Europe/Rome':'IT','Europe/Amsterdam':'NL','Europe/Brussels':'BE','Europe/Zurich':'CH','Europe/Vienna':'AT',");
-  d->ctext_append(t, "'Europe/Lisbon':'PT','Europe/Warsaw':'PL','Europe/Prague':'CZ','Europe/Budapest':'HU','Europe/Bucharest':'RO','Europe/Sofia':'BG','Europe/Athens':'GR','Europe/Helsinki':'FI',");
-  d->ctext_append(t, "'Europe/Stockholm':'SE','Europe/Oslo':'NO','Europe/Copenhagen':'DK','Europe/Dublin':'IE','Europe/Moscow':'RU','Europe/Kiev':'UA','Europe/Istanbul':'TR',");
-  d->ctext_append(t, "'Asia/Tokyo':'JP','Asia/Shanghai':'CN','Asia/Chongqing':'CN','Asia/Hong_Kong':'HK','Asia/Seoul':'KR','Asia/Kolkata':'IN','Asia/Calcutta':'IN','Asia/Mumbai':'IN',");
-  d->ctext_append(t, "'Asia/Singapore':'SG','Asia/Bangkok':'TH','Asia/Jakarta':'ID','Asia/Manila':'PH','Asia/Taipei':'TW','Asia/Dubai':'AE','Asia/Riyadh':'SA','Asia/Tehran':'IR','Asia/Karachi':'PK',");
-  d->ctext_append(t, "'Asia/Dhaka':'BD','Asia/Colombo':'LK','Asia/Kuala_Lumpur':'MY','Asia/Ho_Chi_Minh':'VN','Asia/Saigon':'VN',");
-  d->ctext_append(t, "'Africa/Cairo':'EG','Africa/Lagos':'NG','Africa/Johannesburg':'ZA','Africa/Nairobi':'KE','Africa/Casablanca':'MA','Africa/Algiers':'DZ','Africa/Tunis':'TN',");
-  d->ctext_append(t, "'Australia/Sydney':'AU','Australia/Melbourne':'AU','Australia/Brisbane':'AU','Australia/Perth':'AU','Australia/Adelaide':'AU',");
-  d->ctext_append(t, "'Pacific/Auckland':'NZ','Pacific/Fiji':'FJ','Pacific/Honolulu':'US'");
-  d->ctext_append(t, "};");
-  d->ctext_append(t, "return m[tz]||'unknown';");
-  d->ctext_append(t, "}catch(e){return 'unknown';}}");
-  d->ctext_append(t, "function _vl_send(){");
-  d->ctext_append(t, "if(_vl_sent)return;");
-  d->ctext_append(t, "_vl_sent=true;");
-  d->ctext_append(t, "var dur=Math.round((Date.now()-_vl_start)/1000);");
-  d->ctext_append(t, "var data=JSON.stringify({");
-  d->ctext_append(t, "date:_vl_date,id:_vl_id,lang:_vl_lang,");
-  d->ctext_append(t, "language:navigator.language||'unknown',");
-  d->ctext_append(t, "device:_vl_device(),");
-  d->ctext_append(t, "country:_vl_country(),");
-  d->ctext_append(t, "duration:dur});");
-  d->ctext_append(t, "if(navigator.sendBeacon){");
-  d->ctext_append(t, "navigator.sendBeacon('/api/record_view',new Blob([data],{type:'application/json'}));");
-  d->ctext_append(t, "}else{");
-  d->ctext_append(t, "var x=new XMLHttpRequest();");
-  d->ctext_append(t, "x.open('POST','/api/record_view',false);");
-  d->ctext_append(t, "x.setRequestHeader('Content-Type','application/json');");
-  d->ctext_append(t, "x.send(data);}}");
-  d->ctext_append(t, "document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')_vl_send();});");
-  d->ctext_append(t, "window.addEventListener('beforeunload',_vl_send);");
-  d->ctext_append(t, "})();");
-  d->ctext_append(t, "</script>");
 
   d->ctext_append(t, "</article>");
 
@@ -961,90 +910,6 @@ render_article_list_response(appdeps *d, const char *lang_db_path,
 
   d->json_delete(articles);
 
-  // Client-side view tracking script
-  char chunk_buf[16], size_buf[16];
-  d->custom_sprintf(chunk_buf, "%d", page);
-  d->custom_sprintf(size_buf, "%d", limit);
-  d->ctext_append(t, "<script>");
-  d->ctext_append(t, "(function(){");
-  d->ctext_append(t, "var _vl_start=Date.now();");
-  d->ctext_append(t, "var _vl_page='");
-  d->ctext_append(t, page_id);
-  d->ctext_append(t, "';");
-  d->ctext_append(t, "var _vl_lang='");
-  d->ctext_append(t, current_lang);
-  d->ctext_append(t, "';");
-  d->ctext_append(t, "var _vl_chunk=");
-  d->ctext_append(t, chunk_buf);
-  d->ctext_append(t, ";");
-  d->ctext_append(t, "var _vl_size=");
-  d->ctext_append(t, size_buf);
-  d->ctext_append(t, ";");
-  if (category) {
-    d->ctext_append(t, "var _vl_cat='");
-    d->ctext_append(t, category);
-    d->ctext_append(t, "';");
-  } else {
-    d->ctext_append(t, "var _vl_cat=null;");
-  }
-  if (search) {
-    d->ctext_append(t, "var _vl_search='");
-    d->ctext_append(t, search);
-    d->ctext_append(t, "';");
-  } else {
-    d->ctext_append(t, "var _vl_search=null;");
-  }
-  d->ctext_append(t, "var _vl_sent=false;");
-  d->ctext_append(t, "function _vl_device(){");
-  d->ctext_append(t, "var w=screen.width||window.innerWidth;");
-  d->ctext_append(t, "if(w<768)return 'mobile';");
-  d->ctext_append(t, "if(w<1024)return 'tablet';");
-  d->ctext_append(t, "return 'desktop';}");
-  d->ctext_append(t, "function _vl_country(){");
-  d->ctext_append(t, "try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone;");
-  d->ctext_append(t, "var m={");
-  d->ctext_append(t, "'America/New_York':'US','America/Chicago':'US','America/Denver':'US','America/Los_Angeles':'US','America/Anchorage':'US','America/Phoenix':'US','America/Detroit':'US','America/Indiana':'US',");
-  d->ctext_append(t, "'America/Sao_Paulo':'BR','America/Fortaleza':'BR','America/Bahia':'BR','America/Belem':'BR','America/Manaus':'BR','America/Recife':'BR','America/Cuiaba':'BR','America/Campo_Grande':'BR','America/Araguaina':'BR','America/Maceio':'BR',");
-  d->ctext_append(t, "'America/Argentina/Buenos_Aires':'AR','America/Argentina/Cordoba':'AR','America/Argentina/Mendoza':'AR',");
-  d->ctext_append(t, "'America/Santiago':'CL','America/Bogota':'CO','America/Lima':'PE','America/Caracas':'VE','America/Guayaquil':'EC',");
-  d->ctext_append(t, "'America/Mexico_City':'MX','America/Cancun':'MX','America/Monterrey':'MX','America/Tijuana':'MX',");
-  d->ctext_append(t, "'America/Toronto':'CA','America/Vancouver':'CA','America/Edmonton':'CA','America/Halifax':'CA','America/Winnipeg':'CA',");
-  d->ctext_append(t, "'America/Montevideo':'UY','America/Asuncion':'PY','America/La_Paz':'BO','America/Havana':'CU','America/Panama':'PA','America/Costa_Rica':'CR','America/Guatemala':'GT',");
-  d->ctext_append(t, "'Europe/London':'GB','Europe/Paris':'FR','Europe/Berlin':'DE','Europe/Madrid':'ES','Europe/Rome':'IT','Europe/Amsterdam':'NL','Europe/Brussels':'BE','Europe/Zurich':'CH','Europe/Vienna':'AT',");
-  d->ctext_append(t, "'Europe/Lisbon':'PT','Europe/Warsaw':'PL','Europe/Prague':'CZ','Europe/Budapest':'HU','Europe/Bucharest':'RO','Europe/Sofia':'BG','Europe/Athens':'GR','Europe/Helsinki':'FI',");
-  d->ctext_append(t, "'Europe/Stockholm':'SE','Europe/Oslo':'NO','Europe/Copenhagen':'DK','Europe/Dublin':'IE','Europe/Moscow':'RU','Europe/Kiev':'UA','Europe/Istanbul':'TR',");
-  d->ctext_append(t, "'Asia/Tokyo':'JP','Asia/Shanghai':'CN','Asia/Chongqing':'CN','Asia/Hong_Kong':'HK','Asia/Seoul':'KR','Asia/Kolkata':'IN','Asia/Calcutta':'IN','Asia/Mumbai':'IN',");
-  d->ctext_append(t, "'Asia/Singapore':'SG','Asia/Bangkok':'TH','Asia/Jakarta':'ID','Asia/Manila':'PH','Asia/Taipei':'TW','Asia/Dubai':'AE','Asia/Riyadh':'SA','Asia/Tehran':'IR','Asia/Karachi':'PK',");
-  d->ctext_append(t, "'Asia/Dhaka':'BD','Asia/Colombo':'LK','Asia/Kuala_Lumpur':'MY','Asia/Ho_Chi_Minh':'VN','Asia/Saigon':'VN',");
-  d->ctext_append(t, "'Africa/Cairo':'EG','Africa/Lagos':'NG','Africa/Johannesburg':'ZA','Africa/Nairobi':'KE','Africa/Casablanca':'MA','Africa/Algiers':'DZ','Africa/Tunis':'TN',");
-  d->ctext_append(t, "'Australia/Sydney':'AU','Australia/Melbourne':'AU','Australia/Brisbane':'AU','Australia/Perth':'AU','Australia/Adelaide':'AU',");
-  d->ctext_append(t, "'Pacific/Auckland':'NZ','Pacific/Fiji':'FJ','Pacific/Honolulu':'US'");
-  d->ctext_append(t, "};");
-  d->ctext_append(t, "return m[tz]||'unknown';");
-  d->ctext_append(t, "}catch(e){return 'unknown';}}");
-  d->ctext_append(t, "function _vl_send(){");
-  d->ctext_append(t, "if(_vl_sent)return;");
-  d->ctext_append(t, "_vl_sent=true;");
-  d->ctext_append(t, "var dur=Math.round((Date.now()-_vl_start)/1000);");
-  d->ctext_append(t, "var data=JSON.stringify({");
-  d->ctext_append(t, "page:_vl_page,lang:_vl_lang,chunk:_vl_chunk,size:_vl_size,");
-  d->ctext_append(t, "language:navigator.language||'unknown',");
-  d->ctext_append(t, "device:_vl_device(),");
-  d->ctext_append(t, "country:_vl_country(),");
-  d->ctext_append(t, "duration:dur,");
-  d->ctext_append(t, "category:_vl_cat,search:_vl_search});");
-  d->ctext_append(t, "if(navigator.sendBeacon){");
-  d->ctext_append(t, "navigator.sendBeacon('/api/record_page_view',new Blob([data],{type:'application/json'}));");
-  d->ctext_append(t, "}else{");
-  d->ctext_append(t, "var x=new XMLHttpRequest();");
-  d->ctext_append(t, "x.open('POST','/api/record_page_view',false);");
-  d->ctext_append(t, "x.setRequestHeader('Content-Type','application/json');");
-  d->ctext_append(t, "x.send(data);}}");
-  d->ctext_append(t, "document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')_vl_send();});");
-  d->ctext_append(t, "window.addEventListener('beforeunload',_vl_send);");
-  d->ctext_append(t, "})();");
-  d->ctext_append(t, "</script>");
-
   char *full_html = render_page(d, current_lang, title, d->ctext_get_text(t));
   d->ctext_free(t);
   const appserverresponse *resp = d->send_text(full_html, "text/html", 200);
@@ -1055,6 +920,18 @@ render_article_list_response(appdeps *d, const char *lang_db_path,
 const appserverresponse *handle_home(appdeps *d, const appserverrequest *req) {
   char *lang_db_path = d->concat_path(global_config.database_path, current_lang);
   load_global_data(d, lang_db_path);
+  // Server-side page view tracking
+  {
+    const char *ua = d->get_server_header(req, "User-Agent");
+    const char *device = "desktop";
+    if (ua) {
+      if (d->strstr(ua, "Mobile") || d->strstr(ua, "Android") || d->strstr(ua, "iPhone"))
+        device = "mobile";
+      else if (d->strstr(ua, "iPad") || d->strstr(ua, "Tablet"))
+        device = "tablet";
+    }
+    record_page_view(d, lang_db_path, "home", 1, 10, app_null, app_null, "unknown", device, "unknown", 0);
+  }
   // Home behaves like list_articles with default params (page=1, limit=10)
   const appserverresponse *resp = render_article_list_response(
       d, lang_db_path, global_text.home_page_title, "home", 1, 10, app_null, app_null);
@@ -1086,6 +963,19 @@ const appserverresponse *handle_list_articles(appdeps *d,
     limit = 10;
   if (limit > 50)
     limit = 50;
+
+  // Server-side page view tracking
+  {
+    const char *ua = d->get_server_header(req, "User-Agent");
+    const char *device = "desktop";
+    if (ua) {
+      if (d->strstr(ua, "Mobile") || d->strstr(ua, "Android") || d->strstr(ua, "iPhone"))
+        device = "mobile";
+      else if (d->strstr(ua, "iPad") || d->strstr(ua, "Tablet"))
+        device = "tablet";
+    }
+    record_page_view(d, lang_db_path, "listings", page, limit, category, search, "unknown", device, "unknown", 0);
+  }
 
   const appserverresponse *resp = render_article_list_response(
       d, lang_db_path, global_text.articles_page_title, "listings", page, limit, category, search);
