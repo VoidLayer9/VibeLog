@@ -5,15 +5,15 @@
 
 #include <time.h>
 
-long wrapper_get_unix_time(void) {
+long wrapper_get_unix_time(void *ctx) {
     return (long)time(NULL);
 }
 
-int wrapper_get_random(void) {
+int wrapper_get_random(void *ctx) {
     return rand();
 }
 
-void wrapper_get_formatted_time(long timestamp, char *buf, int buf_size, const char *fmt) {
+void wrapper_get_formatted_time(void *ctx, long timestamp, char *buf, int buf_size, const char *fmt) {
     time_t t = (time_t)timestamp;
     struct tm *gm = gmtime(&t);
     if (!gm) {

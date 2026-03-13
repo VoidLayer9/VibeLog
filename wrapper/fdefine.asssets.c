@@ -3,7 +3,7 @@
 #include "imports/imports.globals.h"
 //silver_chain_scope_end
 
-const unsigned char *wrapper_get_asset_content(const char *path,long *size,int *is_binary){
+const unsigned char *wrapper_get_asset_content(void *ctx, const char *path,long *size,int *is_binary) {
     for(int i=0; i < embedded_assets_total_size; i++){
         if(strcmp(embedded_assets[i].path, path) == 0){
             *size = embedded_assets[i].size;
@@ -14,7 +14,7 @@ const unsigned char *wrapper_get_asset_content(const char *path,long *size,int *
     return NULL;
  
 }
-void *wrapper_list_assets(const char *path){
+void *wrapper_list_assets(void *ctx, const char *path) {
     DtwStringArray *array = newDtwStringArray();
     for(int i=0; i < embedded_assets_total_size; i++){
         if(dtw_starts_with(embedded_assets[i].path, path)){

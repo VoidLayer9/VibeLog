@@ -5,20 +5,20 @@
 
 
 
-const char *wrapper_get_server_route(const void *apprequest){
+const char *wrapper_get_server_route(void *ctx, const void *apprequest) {
     CwebHttpRequest *request = (CwebHttpRequest *)apprequest;
     return request->route;
 }
-const char *wrapper_get_server_method(const void *apprequest){
+const char *wrapper_get_server_method(void *ctx, const void *apprequest) {
     CwebHttpRequest *request = (CwebHttpRequest *)apprequest;
     return request->method;
 }
 //================================HEADERS================================
-const char *wrapper_get_server_header(const void *apprequest, const char *key){
+const char *wrapper_get_server_header(void *ctx, const void *apprequest, const char *key) {
     return CwebHttpRequest_get_header((CwebHttpRequest *)apprequest, key);
 }
 
-const char *wrapper_get_server_header_key(const void *apprequest, int index){
+const char *wrapper_get_server_header_key(void *ctx, const void *apprequest, int index) {
     CwebHttpRequest *request = (CwebHttpRequest *)apprequest;
     if(index < 0 || index >= request->headers->size){
         return NULL;
@@ -28,7 +28,7 @@ const char *wrapper_get_server_header_key(const void *apprequest, int index){
     return keyval->key;
 }
 
-const char *wrapper_get_server_header_value(const void *apprequest, int index){
+const char *wrapper_get_server_header_value(void *ctx, const void *apprequest, int index) {
     CwebHttpRequest *request = (CwebHttpRequest *)apprequest;
     if(index < 0 || index >= request->headers->size){
         return NULL;
@@ -38,12 +38,12 @@ const char *wrapper_get_server_header_value(const void *apprequest, int index){
     return keyval->value;
 }
 
-const char *wrapper_get_server_query_param(const void *apprequest, const char *key){
+const char *wrapper_get_server_query_param(void *ctx, const void *apprequest, const char *key) {
     CwebHttpRequest *request = (CwebHttpRequest *)apprequest;
     return CwebHttpRequest_get_param(request, key);
 }
 
-const char *wrapper_get_server_query_param_key(const void *apprequest, int index){
+const char *wrapper_get_server_query_param_key(void *ctx, const void *apprequest, int index) {
     CwebHttpRequest *request = (CwebHttpRequest *)apprequest;
     if(index < 0 || index >= request->params->size){
         return NULL;
@@ -53,7 +53,7 @@ const char *wrapper_get_server_query_param_key(const void *apprequest, int index
     return keyval->key;
 }
 
-const char *wrapper_get_server_query_param_value(const void *apprequest, int index){
+const char *wrapper_get_server_query_param_value(void *ctx, const void *apprequest, int index) {
     CwebHttpRequest *request = (CwebHttpRequest *)apprequest;
     if(index < 0 || index >= request->params->size){
         return NULL;
@@ -63,55 +63,55 @@ const char *wrapper_get_server_query_param_value(const void *apprequest, int ind
     return keyval->value;
 }
 
-int wrapper_get_server_header_count(const void *apprequest){
+int wrapper_get_server_header_count(void *ctx, const void *apprequest) {
     CwebHttpRequest *request = (CwebHttpRequest *)apprequest;
     return request->headers->size;
 }
 
-int wrapper_get_server_query_param_count(const void *apprequest){
+int wrapper_get_server_query_param_count(void *ctx, const void *apprequest) {
     CwebHttpRequest *request = (CwebHttpRequest *)apprequest;
     return request->params->size;
 }
 
-const unsigned char *wrapper_read_server_body(const void *apprequest, long size, long *read_size){
+const unsigned char *wrapper_read_server_body(void *ctx, const void *apprequest, long size, long *read_size) {
     CwebHttpRequest *request = (CwebHttpRequest *)apprequest;
     unsigned char *response_body = CwebHttpRequest_read_content(request, size);
     *read_size = request->content_length;
     return (const unsigned char *)response_body;
 }
-const void *wrapper_read_server_json(const void *apprequest, long size){
+const void *wrapper_read_server_json(void *ctx, const void *apprequest, long size) {
     CwebHttpRequest *request = (CwebHttpRequest *)apprequest;
     cJSON *json = CWebHttpRequest_read_cJSON(request, size);
     return (const void *)json;
 }
 
-const void *wrapper_newappserverresponse(){
+const void *wrapper_newappserverresponse(void *ctx) {
     return (void*)newCwebHttpResponse();
 }
 
-void wrapper_setappserverresponse_header(void  *appserverresponse, const char *key, const char *value){
+void wrapper_setappserverresponse_header(void *ctx, void  *appserverresponse, const char *key, const char *value) {
     CwebHttpResponse_add_header((CwebHttpResponse *)appserverresponse, key, value);
 }
 
-void wrapper_setappserverresponse_content(void *appserverresponse, const unsigned char *content, long content_size){
+void wrapper_setappserverresponse_content(void *ctx, void *appserverresponse, const unsigned char *content, long content_size) {
     CwebHttpResponse_set_content((CwebHttpResponse *)appserverresponse, (unsigned char *)content, content_size);
 }
 
-void wrapper_setappserverresponse_status_code(void*appserverresponse, int status_code){
+void wrapper_setappserverresponse_status_code(void *ctx, void*appserverresponse, int status_code) {
     ((CwebHttpResponse *)appserverresponse)->status_code = status_code;
 }
 
 
-const void  *wrapper_send_any(const unsigned char *content,long content_size,const char *content_type, int status_code){
+const void  *wrapper_send_any(void *ctx, const unsigned char *content,long content_size,const char *content_type, int status_code) {
     return (void *)cweb_send_any(content_type, content_size, (unsigned char *)content, status_code);
 }
-const void *wrapper_send_text(const char *text,const char *content_type, int status_code){
+const void *wrapper_send_text(void *ctx, const char *text,const char *content_type, int status_code) {
     return (void *)cweb_send_any(content_type, strlen(text), (unsigned char *)text, status_code);
 }
-const void *wrapper_send_file(const char *path,const char *content_type, int status_code){
+const void *wrapper_send_file(void *ctx, const char *path,const char *content_type, int status_code) {
     return (void *)cweb_send_file(path, content_type, status_code);
 }
-const void *wrapper_send_json(const void *json, int status_code){
+const void *wrapper_send_json(void *ctx, const void *json, int status_code) {
     return cweb_send_cJSON((cJSON *)json, status_code);
 }
 
