@@ -2,6 +2,7 @@
 //mannaged by silver chain: https://github.com/OUIsolutions/SilverChain
 #include "imports/imports.fdeclare.h"
 //silver_chain_scope_end
+/*
 
 const appserverresponse *(*global_app_handler)(appdeps *d, void *props) = NULL;
 void *global_app_props = NULL;
@@ -229,3 +230,5 @@ CwebHttpResponse *main_internal_server(CwebHttpRequest *request) {
   const void *response = global_app_handler(&global_appdeps, global_app_props);
   return (CwebHttpResponse *)response;
 }
+
+*/

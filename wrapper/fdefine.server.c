@@ -116,7 +116,7 @@ const void *wrapper_send_json(const void *json, int status_code){
 }
 
 
-
+/*
 int wrapper_start_server(int port, const appserverresponse *(*handler)(appdeps *d, void *props), void *props, appbool single_process) {
     global_app_handler = handler;
     global_app_props = props;
@@ -142,3 +142,4 @@ CwebHttpResponse *main_internal_server_firmware(CwebHttpRequest *request, int ar
     }
     return NULL;
 }
+*/

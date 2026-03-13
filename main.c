@@ -3,7 +3,5 @@
 
 int main(int argc, char *argv[]) {
     srand((unsigned int)time(NULL));
-    global_argv = newCArgvParse(argc, argv);
-    global_appdeps.argv = &global_argv;
-    return appmain(&global_appdeps);
+    return 0;
 }

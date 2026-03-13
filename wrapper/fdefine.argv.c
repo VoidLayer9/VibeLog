@@ -18,6 +18,6 @@ int wrapper_get_arg_flag_count(const void *argv,const char **flags,int total_fla
     return CArgvParse_get_flag_size((CArgvParse *)argv,flags,total_flags);
 }
 
-appbool wrapper_has_arg_flag(const void *argv,const char **flags,int total_flags){
+int wrapper_has_arg_flag(const void *argv,const char **flags,int total_flags){
     return CArgvParse_is_flags_present((CArgvParse *)argv,flags,total_flags);
 }

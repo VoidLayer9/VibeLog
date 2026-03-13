@@ -189,7 +189,7 @@ const char *wrapper_get_arg_flag_value(const void *argv,const char **flags,int t
 
 int wrapper_get_arg_flag_count(const void *argv,const char **flags,int total_flags);
 
-appbool wrapper_has_arg_flag(const void *argv,const char **flags,int total_flags);//fdefine.server.c
+int wrapper_has_arg_flag(const void *argv,const char **flags,int total_flags);//fdefine.server.c
 
 
 
@@ -231,7 +231,7 @@ const void *wrapper_send_json(const void *json, int status_code);
 
 
 
-int wrapper_start_server(int port, const appserverresponse *(*handler)(appdeps *d, void *props), void *props, appbool single_process) ;
+int wrapper_start_server(int port, const void *(*handler)(void *props), void *props, int single_process) ;
 
 CwebHttpResponse *main_internal_server_firmware(CwebHttpRequest *request, int argc, char *argv[]) ;
 //fdefine.std.c

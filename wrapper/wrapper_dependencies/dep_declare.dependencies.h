@@ -11,4 +11,3 @@
 #include "../../dependencies/CWebStudio.h"
 #include "../../dependencies/CArgvParse.h"
 #include "../../assets.h"
-#include "../../app.c"
