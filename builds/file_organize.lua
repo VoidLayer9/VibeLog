@@ -1,4 +1,4 @@
-function silver_chain_organize()
+function file_organize()
 
     local content = darwin.mdeclare.transform_dir({
         dir="wrapper",
@@ -33,7 +33,7 @@ darwin.add_recipe({
     outs= {
         "wrapper/fdeclare.all.h"
     },
-    name="silver_chain_organize",
+    name="file_organize",
     description = "Organize source files using SilverChain",
-    callback = silver_chain_organize
+    callback = file_organize
 })

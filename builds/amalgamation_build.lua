@@ -15,6 +15,6 @@ darwin.add_recipe({
     description = "Make a single file amalgamation of the project",
     outs = {"release/" .. PROJECT_NAME .. ".c"},
     inputs = {"main.c", "app.c", "dependencies", "builds","wrapper"},
-    requires = {"assets","silver_chain_organize"},
+    requires = {"assets","file_organize"},
     callback = amalgamation_build
 })
