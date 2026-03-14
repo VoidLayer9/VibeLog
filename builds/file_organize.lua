@@ -1,5 +1,12 @@
 function file_organize()
 
+
+    local sand_box_content = ""
+    local sandbox_files = darwin.dtw.list_files_recursively("sandbox", true)
+    for i=1,#sandbox_files do
+        local current = sandbox_files[i]
+        sand_box_content = sand_box_content .. "\n#include \"" .. current .. "\""
+    end 
     local content = darwin.mdeclare.transform_dir({
         dir="wrapper",
         startswith="fdefine",
