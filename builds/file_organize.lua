@@ -7,6 +7,9 @@ function file_organize()
         local current = sandbox_files[i]
         sand_box_content = sand_box_content .. "\n#include \"" .. current .. "\""
     end 
+
+    darwin.dtw.write_file('src/bridge/dep_declare.bridge.h', sand_box_content)
+
     local content = darwin.mdeclare.transform_dir({
         dir="wrapper",
         startswith="fdefine",
